@@ -217,16 +217,28 @@ def calibrate(c: Any, version: str, split: dict[str, Any], labeled_items: list[L
     items = _labels_from_items(crop_items(c, split["val_calib"], None), labeled)
     texts, stats = _texts_for(c, version, items, temps)
 
+    target = c.cfg["calibration"].get("target", "value")
+    truth = {(it.doc_id, it.field_id): it.ref_value for it in items}
+    value_ok: dict[tuple[str, str], bool] = {}
+    if target == "value":
+        raw = [st.conf[agg][1.0] if st is not None else None for st in stats]
+        for r in route_items(c, items, texts, raw, [st is not None for st in stats], RoutingPolicy(thresholds={}), truth):
+            if r["truth"] is not None:
+                value_ok[(r["doc_id"], r["field_id"])] = bool(r["correct"])
     by_type: dict[str, list[int]] = defaultdict(list)
     for i, (it, st) in enumerate(zip(items, stats, strict=True)):
-        if st is not None and it.ref_text is not None:
+        has_label = (it.doc_id, it.field_id) in value_ok if target == "value" else it.ref_text is not None
+        if st is not None and has_label:
             by_type[it.field_type].append(i)
     temperatures: dict[str, float | None] = {}
     details: dict[str, Any] = {}
     min_n = int(c.cfg["calibration"].get("min_samples", 20))
     for ftype in sorted({it.field_type for it in items}):
         idx = by_type.get(ftype, [])
-        correct = np.array([compact(texts[i] or "") == compact(items[i].ref_text or "") for i in idx], float)
+        if target == "value":
+            correct = np.array([value_ok[(items[i].doc_id, items[i].field_id)] for i in idx], float)
+        else:
+            correct = np.array([compact(texts[i] or "") == compact(items[i].ref_text or "") for i in idx], float)
         if len(idx) < min_n:
             temperatures[ftype] = None
             details[ftype] = {"n": len(idx), "reason": "muestras_insuficientes"}
@@ -250,7 +262,6 @@ def calibrate(c: Any, version: str, split: dict[str, Any], labeled_items: list[L
         else:
             confs.append(st.conf[agg][T])
             reliable.append(bool(st.text))
-    truth = {(it.doc_id, it.field_id): it.ref_value for it in items}
     records = route_items(c, items, texts, confs, reliable, RoutingPolicy(thresholds={}), truth)
     labeled_records = [r for r in records if r["truth"] is not None and r["conf"] is not None and r["reliable"]]
     thresholds: dict[str, float | None] = {}
@@ -267,7 +278,7 @@ def calibrate(c: Any, version: str, split: dict[str, Any], labeled_items: list[L
         "id": f"cal-{version}-{hashlib.sha256(json.dumps(temperatures, sort_keys=True).encode()).hexdigest()[:8]}",
         "model_version": version, "aggregation": agg, "temperatures": temperatures, "thresholds": thresholds,
         "temperature_details": details, "threshold_details": thr_details, "risk_target": float(th["risk_target"]),
-        "min_support": int(th["min_support"]), "calibration_formats": len(split["val_calib"]), "created_at": _now(),
+        "min_support": int(th["min_support"]), "calibration_formats": len(split["val_calib"]), "target": target, "created_at": _now(),
     }
     c.registry.attach(version, "calibration", profile)
     c.repo.add_calibration_profile(profile)
@@ -298,15 +309,10 @@ def evaluate_routing(c: Any, version: str, docs: list[str], gt: GroundTruth, log
         raw.append(st.conf[agg][1.0])
         confs.append(st.conf[agg][float(T)] if T is not None else st.conf[agg][1.0])
         reliable.append(T is not None and bool(st.text))
-    # calibration quality on literal text correctness
+    # calibration quality on literal text correctness (informative)
     idx = [i for i, it in enumerate(items) if stats[i] is not None and it.ref_text is not None]
     correct_text = np.array([compact(texts[i] or "") == compact(items[i].ref_text or "") for i in idx], float)
-    cal = calibration_summary(np.array([confs[i] for i in idx]), correct_text, bins)
-    unc = calibration_summary(np.array([raw[i] for i in idx]), correct_text, bins)
-    ece_by_type = {}
-    for ftype in sorted({items[i].field_type for i in idx}):
-        sel = [k for k, i in enumerate(idx) if items[i].field_type == ftype]
-        ece_by_type[ftype] = calibration_summary(np.array([confs[idx[k]] for k in sel]), correct_text[sel], bins)["ece"]
+    cal_text = calibration_summary(np.array([confs[i] for i in idx]), correct_text, bins)
     # routing
     truth = {(it.doc_id, it.field_id): gt.value(it.form_id, it.field_id) for it in items}
     for d in docs:
@@ -317,6 +323,16 @@ def evaluate_routing(c: Any, version: str, docs: list[str], gt: GroundTruth, log
                 truth.setdefault((d, spec.id), gt.value(fid, spec.id) if fid else None)
     policy = c.routing_policy(version)
     records = route_items(c, items, texts, confs, reliable, policy, truth)
+    # calibration quality on value correctness (what routing decides on)
+    raw_by_key = {(it.doc_id, it.field_id): raw[i] for i, it in enumerate(items)}
+    cr = [r for r in records if r["conf"] is not None and r["truth"] is not None]
+    corr_v = np.array([r["correct"] for r in cr], float)
+    cal = calibration_summary(np.array([r["conf"] for r in cr]), corr_v, bins)
+    unc = calibration_summary(np.array([raw_by_key.get((r["doc_id"], r["field_id"])) or r["conf"] for r in cr]), corr_v, bins)
+    ece_by_type = {}
+    for ftype in sorted({r["type"] for r in cr}):
+        sel = [k for k, r in enumerate(cr) if r["type"] == ftype]
+        ece_by_type[ftype] = calibration_summary(np.array([cr[k]["conf"] for k in sel]), corr_v[sel], bins)["ece"]
     auto = [r for r in records if r["route"] == "AUTO"]
     n = len(records)
     coverage = len(auto) / n if n else 0.0
@@ -338,7 +354,8 @@ def evaluate_routing(c: Any, version: str, docs: list[str], gt: GroundTruth, log
     out = {
         "n_fields": n, "auto": len(auto), "coverage": coverage, "residual_risk": risk, "by_type": by_type, "review_reasons": dict(reasons),
         "ece": cal["ece"], "ece_uncalibrated": unc["ece"], "ece_by_type": ece_by_type, "reliability": cal["reliability"],
-        "reliability_uncalibrated": unc["reliability"], "text_accuracy": cal["accuracy"], "curve": curve,
+        "reliability_uncalibrated": unc["reliability"], "value_accuracy": cal["accuracy"], "ece_text": cal_text["ece"],
+        "text_accuracy": cal_text["accuracy"], "ece_target_kind": "valor", "curve": curve,
         "curve_overall": overall_pts[:: max(1, len(overall_pts) // 80)], "IE4_pct": 100 * coverage,
         "records_value_accuracy": float(np.mean([r["correct"] for r in records if r["truth"] is not None])) if records else float("nan"),
     }

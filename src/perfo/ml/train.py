@@ -113,6 +113,8 @@ def train_trocr(
     max_steps = int(cfg.get("max_steps", 1000))
     eval_every = int(cfg.get("eval_every", 100))
     patience = int(cfg.get("patience", 3))
+    # early stopping is not allowed before min_steps: the selection CER is noisy during warm-up and first adaptation
+    min_steps = int(cfg.get("min_steps", max_steps * float(cfg.get("min_steps_ratio", 0.75))))
     params = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.AdamW(params, lr=float(cfg.get("lr", 5e-5)), weight_decay=float(cfg.get("weight_decay", 0.01)))
     warmup = max(1, int(max_steps * float(cfg.get("warmup_ratio", 0.05))))
@@ -163,7 +165,7 @@ def train_trocr(
                     best_state = {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()}
                 else:
                     bad_evals += 1
-                    if bad_evals >= patience:
+                    if bad_evals >= patience and step >= min_steps:
                         log(f"    early stopping en el paso {step} (mejor paso {best_step})")
                         break
     except TrainingFailed:

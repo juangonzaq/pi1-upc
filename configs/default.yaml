@@ -54,6 +54,7 @@ training:
   max_steps: 1500
   eval_every: 150
   patience: 3
+  min_steps_ratio: 0.75    # sin early stopping antes del 75 % de los pasos (la CER de selección es ruidosa al inicio)
   warmup_ratio: 0.05
   augment: true
 
@@ -61,6 +62,7 @@ calibration:
   temperatures: [0.25, 0.35, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.4, 1.6, 1.8, 2.0, 2.5, 3.0, 4.0, 5.0]
   ece_bins: 15
   min_samples: 20          # mínimo de recortes por tipo para ajustar la temperatura
+  target: value            # value: correctitud del valor tipado/homologado (decide el enrutamiento) | text: texto literal
 
 cycle:
   replay_ratio: 2.0          # ejemplos históricos por cada ejemplo nuevo (mitiga el olvido catastrófico)

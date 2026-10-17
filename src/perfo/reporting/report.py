@@ -33,6 +33,11 @@ def ok(flag: bool | None) -> str:
 def _ie4_cause(routing: dict[str, Any], cal: dict[str, Any]) -> str:
     missing = [t for t, v in (cal.get("thresholds") or {}).items() if v is None]
     parts = []
+    risky = {t: v["risk"] for t, v in (routing.get("by_type") or {}).items() if v.get("threshold") is not None and v.get("risk", 0) > 0.01}
+    if risky:
+        parts.append("los umbrales elegidos en la mitad de calibración no generalizan: riesgo residual en prueba "
+                     + ", ".join(f"{t} {r * 100:.1f} %" for t, r in risky.items())
+                     + " (> 1 %; pocas muestras de calibración y etiquetas débiles con errores del histórico)")
     if missing:
         reasons = {t: (cal.get("threshold_details", {}).get(t, {}) or {}).get("reason") for t in missing}
         ns = {t: (cal.get("threshold_details", {}).get(t, {}) or {}).get("n") for t in missing}
@@ -90,7 +95,7 @@ def write_report(c: Any, R: dict[str, Any], run_id: str) -> dict[str, str]:
         ("IE4", "Reducción de la intervención manual (cobertura automática con error ≤ 1 %)", f"≥ {tg['IE4_pct']} % con error ≤ {tg['IE4_residual_error'] * 100:.0f} %",
          f"{pct(ie4)} con error residual {pct(None if _n(risk4) else risk4 * 100, 2)}",
          None if _n(ie4) else (ie4 >= tg["IE4_pct"] and (risk4 or 0) <= tg["IE4_residual_error"]),
-         _ie4_cause(rt, R.get("calibration_initial", {})) if _n(ie4) or ie4 < tg["IE4_pct"] else "—"),
+         _ie4_cause(rt, R.get("calibration_initial", {})) if _n(ie4) or ie4 < tg["IE4_pct"] or (risk4 or 0) > tg["IE4_residual_error"] else "—"),
         ("IE5", "Reducción de CER por aprendizaje continuo", f"≥ {tg['IE5_pct']} %",
          f"{pct(ie5)} (CER {num(mf.get('cer') if not cyc_ev else (cyc_ev.get('models') or {}).get(cyc.get('active_before'), {}).get('cer'))} → {num(mc.get('cer'))})" if cand else "— (sin candidato)",
          None if _n(ie5) else ie5 >= tg["IE5_pct"],
@@ -138,7 +143,7 @@ def write_report(c: Any, R: dict[str, Any], run_id: str) -> dict[str, str]:
     hl = hb.get("literal", {})
     L.append("| Métrica | Meta | Resultado | Estado |")
     L.append("|---|---|---|---|")
-    L.append(f"| ECE en prueba, modelo ajustado (15 bins) | ≤ {th['ece_target']} | {num(rt.get('ece'))} (sin calibrar {num(rt.get('ece_uncalibrated'))}) | {ok(None if _n(rt.get('ece')) else rt['ece'] <= th['ece_target'])} |")
+    L.append(f"| ECE en prueba, modelo ajustado (15 bins, correctitud del valor) | ≤ {th['ece_target']} | {num(rt.get('ece'))} (sin calibrar {num(rt.get('ece_uncalibrated'))}; sobre texto literal {num(rt.get('ece_text'))}) | {ok(None if _n(rt.get('ece')) else rt['ece'] <= th['ece_target'])} |")
     if cyc.get("routing"):
         ce = cyc["routing"].get("ece")
         L.append(f"| ECE en prueba, candidato del ciclo | ≤ {th['ece_target']} | {num(ce)} | {ok(None if _n(ce) else ce <= th['ece_target'])} |")
