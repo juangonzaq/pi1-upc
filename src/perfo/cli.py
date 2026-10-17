@@ -187,6 +187,7 @@ def ingest(
 def process(
     doc_id: str | None = typer.Argument(None, help="Documento a procesar (por defecto, todos los que están en cola)"),
     until: str | None = typer.Option(None, help="Detenerse tras una etapa (segment)"),
+    model: str | None = typer.Option(None, "--model", help="Versión de modelo (por defecto, la activa)"),
     profile: str | None = ProfileOpt,
     workspace: str | None = WorkspaceOpt,
 ) -> None:
@@ -194,7 +195,7 @@ def process(
     c = container(profile, workspace)
     if until is None:
         c.ensure_baseline()
-    proc = c.processor()
+    proc = c.processor(version=model)
     ids = [doc_id] if doc_id else [d.id for d in c.repo.list_documents(states=["EN_COLA"])]
     for i, did in enumerate(ids, 1):
         out = proc.process(did, until=until)
@@ -378,6 +379,179 @@ def evaluate_routing_cmd(
         typer.echo(f"            {reliability_plot(res, out / f'fiabilidad_{version}.png')}")
 
 
+review_app = typer.Typer(help="Revisión manual, validación, aprobación y trazabilidad", no_args_is_help=True)
+app.add_typer(review_app, name="review")
+
+
+def _kv(pairs: list[str] | None, opt: str) -> dict[str, str]:
+    out = {}
+    for p in pairs or []:
+        if "=" not in p:
+            raise typer.BadParameter(f"{opt} espera campo=valor, recibió '{p}'")
+        k, v = p.split("=", 1)
+        out[k.strip()] = v.strip()
+    return out
+
+
+@review_app.command("list")
+def review_list(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """Documentos en EN_REVISION con el número de campos que requieren acción."""
+    c = container(profile, workspace)
+    docs = c.repo.list_documents(states=["EN_REVISION"])
+    typer.echo(f"{len(docs)} documentos en revisión")
+    for d in docs:
+        vals = c.repo.get_field_values(d.id)
+        n_rev = sum(1 for v in vals if v.route == "REVIEW")
+        typer.echo(f"  {d.id[:8]}  {d.metadata.get('form_id', d.source_name):<10} {d.business_key or '-':<24} {n_rev:>3}/{len(vals):<3} a revisar  {d.state_cause or ''}")
+
+
+@review_app.command("show")
+def review_show(
+    doc_id: str,
+    sheet: bool = typer.Option(True, help="Genera una hoja PNG con los recortes a revisar"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Campos que requieren acción, con lectura, propuesta, confianza, motivos y candidatas."""
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from perfo.domain.routing import describe  # noqa: PLC0415
+    from perfo.reporting.review_sheet import review_sheet  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    doc = _find_doc(c, doc_id)
+    pend = c.validation.pending(doc.id)
+    typer.echo(f"Documento {doc.id[:8]} ({doc.metadata.get('form_id', doc.source_name)}) · {doc.state.value} · {len(pend)} campos requieren acción")
+    rows = []
+    for i, v in enumerate(pend, 1):
+        conf = f"{v.confidence:.3f}" if v.confidence is not None else "  —  "
+        typer.echo(f"  {i:>2}. {v.field_id:<28} leído={v.text!r:<20} propuesto={v.value!r:<12} conf={conf}  {'; '.join(describe(r) for r in v.reasons)}")
+        if v.homologation and v.homologation.candidates:
+            typer.echo("        candidatas: " + " | ".join(f"{x['code']} {x['description']} ({x['score']:.2f})" for x in v.homologation.candidates[:3]))
+        crop = c.repo.get_crop(v.crop_id) if v.crop_id else None
+        rows.append(SimpleNamespace(field_id=v.field_id, text=v.text, value=v.value, confidence=v.confidence, reasons=v.reasons, mark=v.mark,
+                                    crop_key=crop.object_key if crop else None,
+                                    candidates=v.homologation.candidates if v.homologation else []))
+    if sheet and rows:
+        out = c.workspace / "review"
+        out.mkdir(exist_ok=True)
+        path = review_sheet(c.storage, rows, out / f"{doc.metadata.get('form_id', doc.id[:8])}.png", f"Revisión {doc.metadata.get('form_id', '')} · {doc.business_key}")
+        typer.echo(f"Hoja de revisión: {path}")
+        if doc.preprocessed_key:
+            typer.echo(f"Imagen preprocesada: {c.storage.local_path(doc.preprocessed_key)}")
+    typer.echo("Para confirmar: perfo review confirm <doc> --set campo=valor --choose campo=CÓDIGO --clear campo --accept-rest --user <nombre>")
+
+
+@review_app.command("confirm")
+def review_confirm(
+    doc_id: str,
+    sets: list[str] = typer.Option(None, "--set", help="Corrige el valor: campo=valor (para maestros, el código)"),
+    texts: list[str] = typer.Option(None, "--text", help="Transcripción literal corregida: campo=texto"),
+    chooses: list[str] = typer.Option(None, "--choose", help="Elige una candidata de homologación: campo=CÓDIGO (genera alias)"),
+    clears: list[str] = typer.Option(None, "--clear", help="Marca el campo como vacío"),
+    accept_rest: bool = typer.Option(False, "--accept-rest", help="Confirma explícitamente como propuestos los campos restantes"),
+    user: str = typer.Option(..., "--user", "-u", help="Usuario que valida"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Valida el documento: aplica correcciones, genera alias y guarda una versión inmutable del registro."""
+    from perfo.application.validation import Decision, ValidationBlocked  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    doc = _find_doc(c, doc_id)
+    decisions: dict[str, Decision] = {}
+    text_map = _kv(texts, "--text")
+    for k, v in _kv(sets, "--set").items():
+        decisions[k] = Decision("correct", value=v, text=text_map.pop(k, None))
+    for k, v in text_map.items():
+        decisions[k] = Decision("correct", text=v)
+    for k, v in _kv(chooses, "--choose").items():
+        decisions[k] = Decision("choose", value=v)
+    for k in clears or []:
+        decisions[k] = Decision("clear")
+    try:
+        res = c.validation.confirm(doc.id, decisions, user, accept_rest=accept_rest)
+    except ValidationBlocked as exc:
+        typer.secho(f"No se puede confirmar: {exc}", fg="red")
+        for f in exc.fields[:30]:
+            typer.echo(f"  - {f}")
+        raise typer.Exit(1) from exc
+    typer.secho(f"Registro v{res.record.version} guardado (sha256 {res.record.sha256[:12]}…): {res.stats['auto_accepted']} automáticos, "
+                f"{res.touched} revisados, {res.corrected} corregidos, {res.aliases} alias aprendidos", fg="green")
+
+
+@review_app.command("oracle")
+def review_oracle(
+    batch: str | None = typer.Option(None, help="Limita a un lote (historical | operational)"),
+    approve: bool = typer.Option(True, help="Simula además la aprobación del Jefe de Guardia"),
+    observe_rate: float = typer.Option(0.15),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Validación humana simulada con el ground truth sintético (solo toca campos enrutados a revisión)."""
+    import random  # noqa: PLC0415
+
+    from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
+    from perfo.synth.oracle import oracle_decisions, shift_boss_decision  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    gt = GroundTruth(c.workspace / "synth")
+    rng = random.Random(int(c.cfg["seed"]) + 7)
+    sup = gt.manifest.get("supervisors", [])
+    tot = Counter()
+    for d in c.repo.list_documents(states=["EN_REVISION"], **({"batch": batch} if batch else {})):
+        if not c.repo.get_field_values(d.id):
+            continue
+        res = c.validation.confirm(d.id, oracle_decisions(c.validation, d.id, d.metadata["form_id"], gt), "validador.oraculo")
+        tot.update({"documentos": 1, "campos": res.stats["fields"], "revisados": res.touched, "corregidos": res.corrected, "alias": res.aliases})
+        if approve:
+            dec = shift_boss_decision(rng, observe_rate, sup)
+            c.validation.approve(d.id, dec["decision"], dec["approver"], dec["comment"])
+            tot[dec["decision"].lower()] += 1
+            if dec["decision"] == "OBSERVADO":
+                c.validation.confirm(d.id, oracle_decisions(c.validation, d.id, d.metadata["form_id"], gt), "validador.oraculo", accept_rest=True)
+                c.validation.approve(d.id, "APROBADO", dec["approver"], "Conforme tras observación")
+    typer.echo("Validación simulada: " + ", ".join(f"{k}={v}" for k, v in tot.items()))
+
+
+@app.command("approve")
+def approve_cmd(
+    doc_id: str,
+    decision: str = typer.Option(..., "--decision", "-d", help="aprobar | observar"),
+    comment: str = typer.Option("", "--comment"),
+    user: str = typer.Option(..., "--user", "-u"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Conformidad u observación del Jefe de Guardia sobre un registro validado (HU11)."""
+    c = container(profile, workspace)
+    doc = _find_doc(c, doc_id)
+    dec = {"aprobar": "APROBADO", "observar": "OBSERVADO"}.get(decision.lower(), decision.upper())
+    ap = c.validation.approve(doc.id, dec, user, comment)
+    typer.secho(f"{ap.decision} por {ap.approver}" + (f": {ap.comment}" if ap.comment else ""), fg="green")
+
+
+@review_app.command("tray")
+def review_tray(
+    fecha: str | None = typer.Option(None), guardia: str | None = typer.Option(None), equipo: str | None = typer.Option(None),
+    profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Bandeja de registros confirmados pendientes de aprobación (HU10)."""
+    c = container(profile, workspace)
+    rows = c.validation.tray(**{k: v for k, v in {"fecha": fecha, "guardia": guardia, "equipo": equipo}.items() if v})
+    typer.echo(f"{len(rows)} registros pendientes de aprobación")
+    for r in rows:
+        typer.echo(f"  {r['document_id'][:8]}  {r['fecha']}  guardia {r['guardia']}  {r['equipo']:<6} operador {r['operador'] or '-':<6} v{r['version']}  corregidos {r['corregidos']}")
+
+
+@app.command("trace")
+def trace_cmd(doc_id: str, field_id: str, profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """Trazabilidad de un valor almacenado hasta el recorte y el documento original (HU09)."""
+    c = container(profile, workspace)
+    doc = _find_doc(c, doc_id)
+    typer.echo(json.dumps(c.validation.trace(doc.id, field_id), indent=2, ensure_ascii=False, default=str))
+
+
 @app.command("status")
 def status(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
     """Resumen de documentos por estado y del modelo activo."""
@@ -392,5 +566,35 @@ def status(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOp
     typer.echo(f"Modelo activo: {active.version if active else '(ninguno)'}")
 
 
+def main() -> None:
+    """Entry point: domain errors are shown as clean messages instead of tracebacks."""
+    from perfo.application.ingest import IngestionRejected  # noqa: PLC0415
+    from perfo.application.validation import ValidationBlocked  # noqa: PLC0415
+    from perfo.ml.dataset import LeakageError  # noqa: PLC0415
+    from perfo.ml.train import TrainingFailed  # noqa: PLC0415
+
+    try:
+        app(standalone_mode=False)
+    except ValidationBlocked as exc:
+        typer.secho(f"Bloqueado: {exc}", fg="red", err=True)
+        for f in exc.fields[:30]:
+            typer.echo(f"  - {f}", err=True)
+        raise SystemExit(1) from None
+    except (IngestionRejected, LeakageError, TrainingFailed, KeyError, ValueError) as exc:
+        typer.secho(f"Error: {exc}", fg="red", err=True)
+        raise SystemExit(1) from None
+    except typer.Exit as exc:
+        raise SystemExit(exc.exit_code) from None
+    except click_exceptions() as exc:  # usage errors
+        exc.show()
+        raise SystemExit(exc.exit_code) from None
+
+
+def click_exceptions() -> tuple[type[BaseException], ...]:
+    import click  # noqa: PLC0415
+
+    return (click.ClickException,)
+
+
 if __name__ == "__main__":
-    app()
+    main()

@@ -34,7 +34,7 @@ lora = ["peft>=0.12"]
 mlflow = ["mlflow>=2.15"]
 
 [project.scripts]
-perfo = "perfo.cli:app"
+perfo = "perfo.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

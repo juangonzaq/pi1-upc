@@ -103,6 +103,12 @@ class Container:
             )
         return Homologator(self.masters, self.abbreviations, policies)
 
+    @cached_property
+    def validation(self):  # noqa: ANN201
+        from perfo.application.validation import ValidationService  # noqa: PLC0415
+
+        return ValidationService(self.repo, self.masters, self.homologator, self.template, self.telemetry)
+
     def ensure_baseline(self):  # noqa: ANN201
         """Registers the pretrained checkpoint as baseline and activates it when the registry is empty."""
         ck = self.cfg["model"]["base_checkpoint"]
