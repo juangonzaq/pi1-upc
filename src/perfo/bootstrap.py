@@ -53,7 +53,11 @@ class Container:
 
     @cached_property
     def queue(self) -> InProcessQueue:
-        return InProcessQueue(eager=False)
+        # In-process queue; the durable queue is the EN_COLA state in the repository,
+        # so `perfo process` can resume pending work in a later run.
+        q = InProcessQueue(eager=False)
+        q.register("process_document", lambda payload: self.processor().process(payload["document_id"]))
+        return q
 
     @cached_property
     def abbreviations(self) -> dict[str, dict[str, str]]:
@@ -75,6 +79,82 @@ class Container:
         sha = hashlib.sha256(json.dumps(definition, sort_keys=True).encode()).hexdigest()
         self.repo.save_template(definition["template_id"], str(definition["version"]), definition, sha)
         return parse_template(definition)
+
+    # ---------------------------------------------------------------- application services
+    @cached_property
+    def ingestion(self):  # noqa: ANN201
+        from perfo.application.ingest import IngestionService  # noqa: PLC0415
+
+        return IngestionService(self.repo, self.storage, self.queue, self.telemetry)
+
+    @cached_property
+    def homologator(self):  # noqa: ANN201
+        from perfo.application.homologation import Homologator  # noqa: PLC0415
+        from perfo.domain.homologation import HomologationPolicy  # noqa: PLC0415
+
+        h = self.cfg["thresholds"]["homologation"]
+        policies = {}
+        for mtype in ("labores", "equipos", "personal"):
+            per = (h.get("per_master") or {}).get(mtype, {})
+            policies[mtype] = HomologationPolicy(
+                threshold=float(per.get("threshold", h["threshold"])),
+                min_margin=float(per.get("min_margin", h["min_margin"])),
+                lev_weight=float(per.get("lev_weight", h["lev_weight"])),
+            )
+        return Homologator(self.masters, self.abbreviations, policies)
+
+    def ensure_baseline(self):  # noqa: ANN201
+        """Registers the pretrained checkpoint as baseline and activates it when the registry is empty."""
+        ck = self.cfg["model"]["base_checkpoint"]
+        version = "baseline-" + ck.split("/")[-1]
+        try:
+            info = self.registry.get(version)
+        except KeyError:
+            info = self.registry.publish(version, None, {"base_checkpoint": ck, "artifact_uri": ck, "status": "baseline",
+                                                         "description": "Modelo preentrenado sin ajuste (línea base)"})
+            self.repo.upsert_model_version(info.__dict__)
+        if self.registry.get_active() is None:
+            self.registry.set_active(version, {"approver": "sistema", "reason": "línea base inicial (sin calibración)"})
+            self.repo.upsert_model_version(self.registry.get(version).__dict__)
+        return info
+
+    def calibration_profile(self, version: str | None = None) -> dict | None:
+        info = self.registry.get(version) if version else self.registry.get_active()
+        return self.registry.read_attachment(info.version, "calibration") if info else None
+
+    def routing_policy(self, version: str | None = None):  # noqa: ANN201
+        from perfo.domain.routing import RoutingPolicy  # noqa: PLC0415
+
+        prof = self.calibration_profile(version) or {}
+        return RoutingPolicy(thresholds=dict(prof.get("thresholds", {})),
+                             repeat_mark_forces_review=bool(self.cfg.get_path("routing.repeat_mark_forces_review", True)))
+
+    def recognizer(self, version: str | None = None, calibrated: bool = True):  # noqa: ANN201
+        from perfo.adapters.trocr.recognizer import TrocrRecognizer  # noqa: PLC0415
+
+        info = self.registry.get(version) if version else (self.registry.get_active() or self.ensure_baseline())
+        key = f"{info.version}|{calibrated}"
+        if key not in self._recognizers:
+            m = self.cfg["model"]
+            self._recognizers[key] = TrocrRecognizer(
+                info.artifact_uri, info.version, self.device(), m.get("aggregation", "mean_logprob"),
+                self.calibration_profile(info.version) if calibrated else None, int(m.get("batch_size", 32)), int(m.get("max_new_tokens", 24)),
+            )
+        return self._recognizers[key]
+
+    def processor(self, actor: str = "sistema", version: str | None = None, recognizer=None):  # noqa: ANN001, ANN201
+        from perfo.application.processing import DocumentProcessor  # noqa: PLC0415
+
+        rec = recognizer
+        return DocumentProcessor(
+            self.repo, self.storage, self.telemetry, self.template, self.reference_path, self.cfg,
+            (lambda: rec) if rec is not None else (lambda: self.recognizer(version)),
+            self.homologator, self.masters, lambda: self.routing_policy(version), actor,
+        )
+
+    @cached_property
+    def reference_path(self) -> str:
+        return str(self.cfg.resolve(self.template_definition["reference_image"]))
 
     def device(self) -> str:
         want = self.cfg.get_path("device", "auto")

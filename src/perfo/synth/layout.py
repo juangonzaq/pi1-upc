@@ -266,7 +266,7 @@ def build_template_v1() -> dict[str, Any]:
         "valid_from": "2026-10-14",
         "description": "Reporte de equipo de perforación de taladros largos (plantilla v1, geometría sintética A4 horizontal)",
         "reference": {"width": W, "height": H, "dpi": 300},
-        "alignment": {"tolerance_px": 12, "min_inliers": 40, "max_reproj_error_px": 4.0, "min_dpi": 200, "min_sharpness": 15.0},
+        "alignment": {"tolerance_px": 12, "min_inliers": 40, "max_reproj_error_px": 4.0, "min_dpi": 200, "min_sharpness": 200.0},
         "code_sets": {
             "shift": {"values": ["D", "N"], "synonyms": {"DIA": "D", "NOCHE": "N"}},
             "crew": {"values": ["A", "B", "C"]},

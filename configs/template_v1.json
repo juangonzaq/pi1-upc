@@ -1209,5 +1209,6 @@
     "306": "OTRAS FALLAS"
    }
   }
- }
+ },
+ "reference_image": "configs/template_v1_reference.png"
 }
