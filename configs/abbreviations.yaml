@@ -1,0 +1,31 @@
+# Diccionario de abreviaturas por tipo de maestro (etapa de normalización de la homologación).
+# Una abreviatura que se mapea a "" se elimina (palabra vacía).
+labores:
+  NV: NIVEL
+  NIV: NIVEL
+  TJ: TAJO
+  GAL: GALERIA
+  GL: GALERIA
+  RP: RAMPA
+  RA: RAMPA
+  CX: CRUCERO
+  XC: CRUCERO
+  SN: SUBNIVEL
+  CH: CHIMENEA
+  BP: BYPASS
+  VN: VENTANA
+  N: NORTE
+  NTE: NORTE
+  S: SUR
+  E: ESTE
+  W: OESTE
+  O: OESTE
+  "NO": ""
+  NRO: ""
+equipos:
+  N: ""
+  NO: ""
+  NRO: ""
+  EQ: ""
+  JB: JUMBO
+personal: {}

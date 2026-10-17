@@ -1,0 +1,37 @@
+# Perfil full: corpus mayor y modelo base (TB1, Sprint 1). Configurable; pensado para GPU/MPS.
+workspace: data/e2e/full
+model:
+  base_checkpoint: microsoft/trocr-base-handwritten
+  batch_size: 24
+synth:
+  historical_forms: 400
+  operational_forms: 80
+  operators: 24
+  new_operators: 4
+  labores: 80
+  equipment: 12
+  max_activity_rows: 14
+  max_delay_rows: 4
+  max_failure_rows: 2
+  history_error_rate: 0.03
+  history_duplicate_rate: 0.02
+  history_missing_rate: 0.02
+  metadata_error_rate: 0.01
+  bad_scans_historical: 4
+  bad_scans_operational: 2
+  workers: 8
+dataset:
+  unseen_operators: 2
+  sprint1_sample: 30
+  reference_subset: 50
+  required_formats: 360
+training:
+  max_steps: 3000
+  eval_every: 250
+  patience: 3
+  batch_size: 16
+  lr: 5.0e-5
+cycle:
+  max_steps: 600
+  eval_every: 150
+  patience: 2

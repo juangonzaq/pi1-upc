@@ -1,0 +1,1213 @@
+{
+ "template_id": "reporte-perforacion-tl",
+ "version": "1.0",
+ "valid_from": "2026-10-14",
+ "description": "Reporte de equipo de perforación de taladros largos (plantilla v1, geometría sintética A4 horizontal)",
+ "reference": {
+  "width": 3508,
+  "height": 2480,
+  "dpi": 300
+ },
+ "alignment": {
+  "tolerance_px": 12,
+  "min_inliers": 40,
+  "max_reproj_error_px": 4.0,
+  "min_dpi": 200,
+  "min_sharpness": 15.0
+ },
+ "code_sets": {
+  "shift": {
+   "values": [
+    "D",
+    "N"
+   ],
+   "synonyms": {
+    "DIA": "D",
+    "NOCHE": "N"
+   }
+  },
+  "crew": {
+   "values": [
+    "A",
+    "B",
+    "C"
+   ]
+  },
+  "activity_codes": {
+   "master": "codigos",
+   "kind": "actividad",
+   "values": [
+    "101",
+    "102",
+    "103",
+    "104",
+    "105",
+    "106",
+    "107"
+   ]
+  },
+  "delay_codes": {
+   "master": "codigos",
+   "kind": "demora",
+   "values": [
+    "201",
+    "202",
+    "203",
+    "204",
+    "205",
+    "206",
+    "207",
+    "208",
+    "209",
+    "210",
+    "211",
+    "212",
+    "213",
+    "214",
+    "215",
+    "216",
+    "217"
+   ]
+  },
+  "failure_codes": {
+   "master": "codigos",
+   "kind": "falla",
+   "values": [
+    "301",
+    "302",
+    "303",
+    "304",
+    "305",
+    "306"
+   ]
+  }
+ },
+ "fields": [
+  {
+   "id": "header.date",
+   "block": "header",
+   "label": "FECHA",
+   "type": "date",
+   "box": [
+    0.022235,
+    0.084677,
+    0.1374,
+    0.114516
+   ],
+   "frame": [
+    0.019954,
+    0.068548,
+    0.139681,
+    0.116935
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 4,
+    "total": 4.8
+   },
+   "required": "always"
+  },
+  {
+   "id": "header.shift",
+   "block": "header",
+   "label": "TURNO (D/N)",
+   "type": "code",
+   "box": [
+    0.141961,
+    0.084677,
+    0.222919,
+    0.114516
+   ],
+   "frame": [
+    0.139681,
+    0.068548,
+    0.2252,
+    0.116935
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 5,
+    "total": 5.0
+   },
+   "required": "always",
+   "code_set": "shift"
+  },
+  {
+   "id": "header.crew",
+   "block": "header",
+   "label": "GUARDIA",
+   "type": "code",
+   "box": [
+    0.22748,
+    0.084677,
+    0.297035,
+    0.114516
+   ],
+   "frame": [
+    0.2252,
+    0.068548,
+    0.299316,
+    0.116935
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 5,
+    "L": 4,
+    "total": 4.3
+   },
+   "required": "always",
+   "code_set": "crew"
+  },
+  {
+   "id": "header.equipment",
+   "block": "header",
+   "label": "EQUIPO",
+   "type": "master_ref",
+   "box": [
+    0.301596,
+    0.084677,
+    0.45667,
+    0.114516
+   ],
+   "frame": [
+    0.299316,
+    0.068548,
+    0.458951,
+    0.116935
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 4,
+    "total": 4.8
+   },
+   "required": "always",
+   "master_type": "equipos"
+  },
+  {
+   "id": "header.stope",
+   "block": "header",
+   "label": "TAJO",
+   "type": "master_ref",
+   "box": [
+    0.461231,
+    0.084677,
+    0.673318,
+    0.114516
+   ],
+   "frame": [
+    0.458951,
+    0.068548,
+    0.675599,
+    0.116935
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 3,
+    "total": 4.6
+   },
+   "required": "always",
+   "master_type": "labores"
+  },
+  {
+   "id": "header.operator",
+   "block": "header",
+   "label": "OPERADOR",
+   "type": "master_ref",
+   "box": [
+    0.677879,
+    0.084677,
+    0.977765,
+    0.114516
+   ],
+   "frame": [
+    0.675599,
+    0.068548,
+    0.980046,
+    0.116935
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 2,
+    "total": 4.4
+   },
+   "required": "always",
+   "master_type": "personal"
+  },
+  {
+   "id": "header.engine_hm_start",
+   "block": "header",
+   "label": "HORÓMETRO MOTOR INICIAL",
+   "type": "numeric",
+   "box": [
+    0.022235,
+    0.137097,
+    0.177309,
+    0.166935
+   ],
+   "frame": [
+    0.019954,
+    0.120968,
+    0.17959,
+    0.169355
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 4,
+    "total": 4.8
+   },
+   "required": "always",
+   "min": 0,
+   "max": 99999.9,
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.engine_hm_end",
+   "block": "header",
+   "label": "HORÓMETRO MOTOR FINAL",
+   "type": "numeric",
+   "box": [
+    0.18187,
+    0.137097,
+    0.336944,
+    0.166935
+   ],
+   "frame": [
+    0.17959,
+    0.120968,
+    0.339225,
+    0.169355
+   ],
+   "priority": true,
+   "score": {
+    "R": 5,
+    "F": 5,
+    "L": 4,
+    "total": 4.8
+   },
+   "required": "always",
+   "min": 0,
+   "max": 99999.9,
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.percussion_hm_start",
+   "block": "header",
+   "label": "HORÓMETRO PERCUSIÓN INICIAL",
+   "type": "numeric",
+   "box": [
+    0.341505,
+    0.137097,
+    0.496579,
+    0.166935
+   ],
+   "frame": [
+    0.339225,
+    0.120968,
+    0.49886,
+    0.169355
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 5,
+    "L": 4,
+    "total": 4.3
+   },
+   "required": "always",
+   "min": 0,
+   "max": 99999.9,
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.percussion_hm_end",
+   "block": "header",
+   "label": "HORÓMETRO PERCUSIÓN FINAL",
+   "type": "numeric",
+   "box": [
+    0.50114,
+    0.137097,
+    0.656214,
+    0.166935
+   ],
+   "frame": [
+    0.49886,
+    0.120968,
+    0.658495,
+    0.169355
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 5,
+    "L": 4,
+    "total": 4.3
+   },
+   "required": "always",
+   "min": 0,
+   "max": 99999.9,
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.initial_state",
+   "block": "header",
+   "label": "ESTADO INICIAL DEL EQUIPO",
+   "type": "free_text",
+   "box": [
+    0.660775,
+    0.137097,
+    0.977765,
+    0.166935
+   ],
+   "frame": [
+    0.658495,
+    0.120968,
+    0.980046,
+    0.169355
+   ],
+   "priority": false,
+   "score": {
+    "R": 2,
+    "F": 3,
+    "L": 2,
+    "total": 2.3
+   },
+   "required": "no"
+  },
+  {
+   "id": "closing.location",
+   "block": "closing",
+   "label": "UBICACIÓN FINAL DEL EQUIPO",
+   "type": "master_ref",
+   "box": [
+    0.381414,
+    0.693548,
+    0.559293,
+    0.715323
+   ],
+   "frame": [
+    0.379133,
+    0.677419,
+    0.561574,
+    0.717742
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 4,
+    "L": 3,
+    "total": 3.8
+   },
+   "required": "no",
+   "master_type": "labores"
+  },
+  {
+   "id": "closing.final_state",
+   "block": "closing",
+   "label": "ESTADO FINAL",
+   "type": "free_text",
+   "box": [
+    0.563854,
+    0.693548,
+    0.68187,
+    0.715323
+   ],
+   "frame": [
+    0.561574,
+    0.677419,
+    0.684151,
+    0.717742
+   ],
+   "priority": false,
+   "score": {
+    "R": 3,
+    "F": 4,
+    "L": 3,
+    "total": 3.3
+   },
+   "required": "no"
+  },
+  {
+   "id": "closing.gallons",
+   "block": "closing",
+   "label": "N.° GALONES",
+   "type": "numeric",
+   "box": [
+    0.381414,
+    0.737903,
+    0.437856,
+    0.759677
+   ],
+   "frame": [
+    0.379133,
+    0.721774,
+    0.440137,
+    0.762097
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 4,
+    "L": 4,
+    "total": 4.0
+   },
+   "required": "no",
+   "min": 0,
+   "max": 300,
+   "subtype": "integer"
+  },
+  {
+   "id": "closing.bits",
+   "block": "closing",
+   "label": "BROCAS",
+   "type": "numeric",
+   "box": [
+    0.442417,
+    0.737903,
+    0.49886,
+    0.759677
+   ],
+   "frame": [
+    0.440137,
+    0.721774,
+    0.50114,
+    0.762097
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 4,
+    "L": 4,
+    "total": 4.0
+   },
+   "required": "no",
+   "min": 0,
+   "max": 20,
+   "subtype": "integer"
+  },
+  {
+   "id": "closing.rods",
+   "block": "closing",
+   "label": "BARRAS",
+   "type": "numeric",
+   "box": [
+    0.503421,
+    0.737903,
+    0.559863,
+    0.759677
+   ],
+   "frame": [
+    0.50114,
+    0.721774,
+    0.562144,
+    0.762097
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 4,
+    "L": 4,
+    "total": 4.0
+   },
+   "required": "no",
+   "min": 0,
+   "max": 20,
+   "subtype": "integer"
+  },
+  {
+   "id": "closing.tube",
+   "block": "closing",
+   "label": "TUBO",
+   "type": "numeric",
+   "box": [
+    0.564424,
+    0.737903,
+    0.620867,
+    0.759677
+   ],
+   "frame": [
+    0.562144,
+    0.721774,
+    0.623147,
+    0.762097
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 3,
+    "L": 4,
+    "total": 3.7
+   },
+   "required": "no",
+   "min": 0,
+   "max": 20,
+   "subtype": "integer"
+  },
+  {
+   "id": "closing.shank",
+   "block": "closing",
+   "label": "SHANK",
+   "type": "numeric",
+   "box": [
+    0.625428,
+    0.737903,
+    0.68187,
+    0.759677
+   ],
+   "frame": [
+    0.623147,
+    0.721774,
+    0.684151,
+    0.762097
+   ],
+   "priority": true,
+   "score": {
+    "R": 4,
+    "F": 4,
+    "L": 4,
+    "total": 4.0
+   },
+   "required": "no",
+   "min": 0,
+   "max": 20,
+   "subtype": "integer"
+  },
+  {
+   "id": "closing.steel_notes",
+   "block": "closing",
+   "label": "OBSERVACIONES CONTROL DE ACEROS",
+   "type": "free_text",
+   "box": [
+    0.381414,
+    0.782258,
+    0.68187,
+    0.804032
+   ],
+   "frame": [
+    0.379133,
+    0.766129,
+    0.684151,
+    0.806452
+   ],
+   "priority": false,
+   "score": {
+    "R": 2,
+    "F": 2,
+    "L": 1,
+    "total": 1.8
+   },
+   "required": "no"
+  },
+  {
+   "id": "closing.general_notes",
+   "block": "closing",
+   "label": "OBSERVACIONES GENERALES",
+   "type": "free_text",
+   "box": [
+    0.381414,
+    0.826613,
+    0.68187,
+    0.848387
+   ],
+   "frame": [
+    0.379133,
+    0.810484,
+    0.684151,
+    0.850806
+   ],
+   "priority": false,
+   "score": {
+    "R": 2,
+    "F": 2,
+    "L": 1,
+    "total": 1.8
+   },
+   "required": "no"
+  }
+ ],
+ "tables": [
+  {
+   "id": "activities",
+   "block": "activities",
+   "title": "ACTIVIDADES",
+   "rows": 22,
+   "box": [
+    0.019954,
+    0.189516,
+    0.980046,
+    0.651613
+   ],
+   "header_height": 0.03629,
+   "row_height": 0.019355,
+   "columns": [
+    {
+     "id": "activity_no",
+     "label": "N.°",
+     "type": "numeric",
+     "x0": 0.019954,
+     "x1": 0.04561,
+     "priority": true,
+     "score": {
+      "R": 3,
+      "F": 5,
+      "L": 5,
+      "total": 4.0
+     },
+     "required": "no",
+     "min": 1,
+     "max": 22,
+     "subtype": "integer"
+    },
+    {
+     "id": "code",
+     "label": "CÓD. ACT.",
+     "type": "code",
+     "x0": 0.04561,
+     "x1": 0.085519,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 5,
+      "L": 5,
+      "total": 5.0
+     },
+     "required": "if_row",
+     "code_set": "activity_codes"
+    },
+    {
+     "id": "start",
+     "label": "HORA/HORÓM. INICIAL",
+     "type": "time",
+     "x0": 0.085519,
+     "x1": 0.142531,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 5,
+      "L": 3,
+      "total": 4.6
+     },
+     "required": "if_row"
+    },
+    {
+     "id": "end",
+     "label": "HORA/HORÓM. FINAL",
+     "type": "time",
+     "x0": 0.142531,
+     "x1": 0.199544,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 5,
+      "L": 3,
+      "total": 4.6
+     },
+     "required": "if_row"
+    },
+    {
+     "id": "labor",
+     "label": "LABOR",
+     "type": "master_ref",
+     "x0": 0.199544,
+     "x1": 0.322121,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 4,
+      "L": 2,
+      "total": 4.1
+     },
+     "required": "if_row",
+     "master_type": "labores"
+    },
+    {
+     "id": "reamed_hole",
+     "label": "TAL. REPASADO",
+     "type": "free_text",
+     "x0": 0.322121,
+     "x1": 0.36203,
+     "priority": false,
+     "score": {
+      "R": 3,
+      "F": 2,
+      "L": 4,
+      "total": 2.9
+     },
+     "required": "no"
+    },
+    {
+     "id": "row_no",
+     "label": "N.° FILA",
+     "type": "numeric",
+     "x0": 0.36203,
+     "x1": 0.396237,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 4,
+      "L": 4,
+      "total": 4.0
+     },
+     "required": "no",
+     "min": 1,
+     "max": 60,
+     "subtype": "integer"
+    },
+    {
+     "id": "holes",
+     "label": "N.° TAL.",
+     "type": "numeric",
+     "x0": 0.396237,
+     "x1": 0.433295,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 4,
+      "L": 4,
+      "total": 4.5
+     },
+     "required": "no",
+     "min": 1,
+     "max": 40,
+     "subtype": "integer"
+    },
+    {
+     "id": "bars",
+     "label": "N.° BARRAS",
+     "type": "numeric",
+     "x0": 0.433295,
+     "x1": 0.470353,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 4,
+      "L": 4,
+      "total": 4.0
+     },
+     "required": "no",
+     "min": 1,
+     "max": 30,
+     "subtype": "integer"
+    },
+    {
+     "id": "length_m",
+     "label": "LONG. TAL. (m)",
+     "type": "numeric",
+     "x0": 0.470353,
+     "x1": 0.515964,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 4,
+      "L": 4,
+      "total": 4.5
+     },
+     "required": "no",
+     "min": 1,
+     "max": 30,
+     "subtype": "decimal"
+    },
+    {
+     "id": "angle_planned",
+     "label": "ÁNG. PROG.",
+     "type": "numeric",
+     "x0": 0.515964,
+     "x1": 0.558723,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 4,
+      "L": 4,
+      "total": 4.0
+     },
+     "required": "no",
+     "min": 0,
+     "max": 360,
+     "subtype": "decimal"
+    },
+    {
+     "id": "angle_executed",
+     "label": "ÁNG. EJEC.",
+     "type": "numeric",
+     "x0": 0.558723,
+     "x1": 0.601482,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 4,
+      "L": 4,
+      "total": 4.0
+     },
+     "required": "no",
+     "min": 0,
+     "max": 360,
+     "subtype": "decimal"
+    },
+    {
+     "id": "deviation_m",
+     "label": "DESV. (m)",
+     "type": "numeric",
+     "x0": 0.601482,
+     "x1": 0.644242,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 3,
+      "L": 3,
+      "total": 3.5
+     },
+     "required": "no",
+     "min": 0,
+     "max": 5,
+     "subtype": "decimal"
+    },
+    {
+     "id": "deviation_pct",
+     "label": "DESV. (%)",
+     "type": "numeric",
+     "x0": 0.644242,
+     "x1": 0.687001,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 3,
+      "L": 3,
+      "total": 3.5
+     },
+     "required": "no",
+     "min": 0,
+     "max": 50,
+     "subtype": "decimal"
+    },
+    {
+     "id": "notes",
+     "label": "OBSERVACIONES",
+     "type": "free_text",
+     "x0": 0.687001,
+     "x1": 0.980046,
+     "priority": false,
+     "score": {
+      "R": 2,
+      "F": 2,
+      "L": 1,
+      "total": 1.8
+     },
+     "required": "no"
+    }
+   ]
+  },
+  {
+   "id": "delays",
+   "block": "delays",
+   "title": "DEMORAS OPERATIVAS",
+   "rows": 6,
+   "box": [
+    0.019954,
+    0.677419,
+    0.367731,
+    0.81371
+   ],
+   "header_height": 0.020161,
+   "row_height": 0.019355,
+   "columns": [
+    {
+     "id": "labor",
+     "label": "LABOR",
+     "type": "master_ref",
+     "x0": 0.019954,
+     "x1": 0.133979,
+     "priority": true,
+     "score": {
+      "R": 4,
+      "F": 3,
+      "L": 3,
+      "total": 3.5
+     },
+     "required": "if_row",
+     "master_type": "labores"
+    },
+    {
+     "id": "code",
+     "label": "CÓDIGO",
+     "type": "code",
+     "x0": 0.133979,
+     "x1": 0.176739,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 3,
+      "L": 5,
+      "total": 4.4
+     },
+     "required": "if_row",
+     "code_set": "delay_codes"
+    },
+    {
+     "id": "start",
+     "label": "HORA INICIAL",
+     "type": "time",
+     "x0": 0.176739,
+     "x1": 0.22805,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 3,
+      "L": 3,
+      "total": 4.0
+     },
+     "required": "if_row"
+    },
+    {
+     "id": "end",
+     "label": "HORA FINAL",
+     "type": "time",
+     "x0": 0.22805,
+     "x1": 0.279361,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 3,
+      "L": 3,
+      "total": 4.0
+     },
+     "required": "if_row"
+    },
+    {
+     "id": "notes",
+     "label": "OBSERVACIÓN",
+     "type": "free_text",
+     "x0": 0.279361,
+     "x1": 0.367731,
+     "priority": false,
+     "score": {
+      "R": 2,
+      "F": 2,
+      "L": 1,
+      "total": 1.8
+     },
+     "required": "no"
+    }
+   ]
+  },
+  {
+   "id": "failures",
+   "block": "failures",
+   "title": "PARADAS POR FALLAS Y REPARACIONES",
+   "rows": 4,
+   "box": [
+    0.019954,
+    0.832661,
+    0.367731,
+    0.930242
+   ],
+   "header_height": 0.020161,
+   "row_height": 0.019355,
+   "columns": [
+    {
+     "id": "labor",
+     "label": "LABOR",
+     "type": "master_ref",
+     "x0": 0.019954,
+     "x1": 0.114025,
+     "priority": false,
+     "score": {
+      "R": 3,
+      "F": 2,
+      "L": 3,
+      "total": 2.7
+     },
+     "required": "no",
+     "master_type": "labores"
+    },
+    {
+     "id": "code",
+     "label": "CÓDIGO",
+     "type": "code",
+     "x0": 0.114025,
+     "x1": 0.151083,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 2,
+      "L": 5,
+      "total": 4.1
+     },
+     "required": "if_row",
+     "code_set": "failure_codes"
+    },
+    {
+     "id": "start",
+     "label": "HORA INICIAL",
+     "type": "time",
+     "x0": 0.151083,
+     "x1": 0.199544,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 2,
+      "L": 3,
+      "total": 3.7
+     },
+     "required": "if_row"
+    },
+    {
+     "id": "end",
+     "label": "HORA FINAL",
+     "type": "time",
+     "x0": 0.199544,
+     "x1": 0.248005,
+     "priority": true,
+     "score": {
+      "R": 5,
+      "F": 2,
+      "L": 3,
+      "total": 3.7
+     },
+     "required": "if_row"
+    },
+    {
+     "id": "total_hours",
+     "label": "HORAS TOTALES",
+     "type": "numeric",
+     "x0": 0.248005,
+     "x1": 0.290764,
+     "priority": false,
+     "score": {
+      "R": 4,
+      "F": 2,
+      "L": 4,
+      "total": 3.4
+     },
+     "required": "no",
+     "min": 0,
+     "max": 13,
+     "subtype": "decimal"
+    },
+    {
+     "id": "notes",
+     "label": "OBSERVACIÓN",
+     "type": "free_text",
+     "x0": 0.290764,
+     "x1": 0.367731,
+     "priority": false,
+     "score": {
+      "R": 2,
+      "F": 2,
+      "L": 1,
+      "total": 1.8
+     },
+     "required": "no"
+    }
+   ]
+  }
+ ],
+ "signatures": [
+  {
+   "id": "signatures.operator",
+   "label": "OPERADOR",
+   "box": [
+    0.381984,
+    0.866935,
+    0.452537,
+    0.927419
+   ]
+  },
+  {
+   "id": "signatures.shift_boss",
+   "label": "JEFE DE GUARDIA MINA",
+   "box": [
+    0.458238,
+    0.866935,
+    0.528791,
+    0.927419
+   ]
+  },
+  {
+   "id": "signatures.maintenance",
+   "label": "MANTENIMIENTO",
+   "box": [
+    0.534493,
+    0.866935,
+    0.605046,
+    0.927419
+   ]
+  },
+  {
+   "id": "signatures.drilling_blasting",
+   "label": "PERF. Y VOLADURA",
+   "box": [
+    0.610747,
+    0.866935,
+    0.6813,
+    0.927419
+   ]
+  }
+ ],
+ "static": {
+  "title": "REPORTE DE EQUIPO DE PERFORACIÓN DE TALADROS LARGOS",
+  "subtitle": "UNIDAD MINERA — FORMATO POR EQUIPO Y GUARDIA (PLANTILLA v1)",
+  "legend_box": [
+   0.695553,
+   0.663306,
+   0.980046,
+   0.927419
+  ],
+  "rule_box": [
+   0.695553,
+   0.931452,
+   0.980046,
+   0.975806
+  ],
+  "rule_note": "% DESVIACIÓN = DESVIACIÓN (m) / LONGITUD DEL TALADRO (m) × 100. TODA DESVIACIÓN MAYOR DE 2 % DEBE CORREGIRSE.",
+  "codes": {
+   "ACTIVIDADES": {
+    "101": "PERFORACIÓN DE PRODUCCIÓN",
+    "102": "REPASO DE TALADROS",
+    "103": "PERFORACIÓN DE SLOT / CARA LIBRE",
+    "104": "TRASLADO DE EQUIPO",
+    "105": "POSICIONAMIENTO Y EMBOQUILLADO",
+    "106": "LIMPIEZA DE TALADROS",
+    "107": "OTRAS ACTIVIDADES"
+   },
+   "DEMORAS": {
+    "201": "CAMBIO DE GUARDIA",
+    "202": "REFRIGERIO",
+    "203": "FALTA DE AGUA",
+    "204": "FALTA DE ENERGÍA",
+    "205": "VENTILACIÓN DEFICIENTE",
+    "206": "ESPERA DE TOPOGRAFÍA",
+    "207": "ESPERA DE MARCADO",
+    "208": "LABOR OCUPADA",
+    "209": "TRÁNSITO DE EQUIPOS",
+    "210": "CHARLA DE SEGURIDAD",
+    "211": "INSPECCIÓN DE LABOR",
+    "212": "DESATADO DE ROCAS",
+    "213": "VOLADURA EN ZONA",
+    "214": "FALTA DE ACEROS",
+    "215": "FALTA DE OPERADOR",
+    "216": "ABASTECIMIENTO DE COMBUSTIBLE",
+    "217": "OTRAS DEMORAS"
+   },
+   "FALLAS": {
+    "301": "FALLA MECÁNICA",
+    "302": "FALLA ELÉCTRICA",
+    "303": "FALLA HIDRÁULICA",
+    "304": "FALLA DE PERCUSIÓN",
+    "305": "MANTENIMIENTO PREVENTIVO",
+    "306": "OTRAS FALLAS"
+   }
+  }
+ }
+}

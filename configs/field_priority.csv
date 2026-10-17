@@ -1,0 +1,47 @@
+campo,bloque,etiqueta,tipo,obligatorio,R,F,L,puntaje,priorizado
+header.shift,header,TURNO (D/N),code,always,5,5,5,5.0,sí
+header.date,header,FECHA,date,always,5,5,4,4.8,sí
+header.equipment,header,EQUIPO,master_ref,always,5,5,4,4.8,sí
+header.engine_hm_start,header,HORÓMETRO MOTOR INICIAL,numeric,always,5,5,4,4.8,sí
+header.engine_hm_end,header,HORÓMETRO MOTOR FINAL,numeric,always,5,5,4,4.8,sí
+header.stope,header,TAJO,master_ref,always,5,5,3,4.6,sí
+header.operator,header,OPERADOR,master_ref,always,5,5,2,4.4,sí
+header.crew,header,GUARDIA,code,always,4,5,4,4.3,sí
+header.percussion_hm_start,header,HORÓMETRO PERCUSIÓN INICIAL,numeric,always,4,5,4,4.3,sí
+header.percussion_hm_end,header,HORÓMETRO PERCUSIÓN FINAL,numeric,always,4,5,4,4.3,sí
+header.initial_state,header,ESTADO INICIAL DEL EQUIPO,free_text,no,2,3,2,2.3,no
+activities.code,activities,CÓD. ACT.,code,if_row,5,5,5,5.0,sí
+activities.start,activities,HORA/HORÓM. INICIAL,time,if_row,5,5,3,4.6,sí
+activities.end,activities,HORA/HORÓM. FINAL,time,if_row,5,5,3,4.6,sí
+activities.holes,activities,N.° TAL.,numeric,no,5,4,4,4.5,sí
+activities.length_m,activities,LONG. TAL. (m),numeric,no,5,4,4,4.5,sí
+activities.labor,activities,LABOR,master_ref,if_row,5,4,2,4.1,sí
+activities.activity_no,activities,N.°,numeric,no,3,5,5,4.0,sí
+activities.row_no,activities,N.° FILA,numeric,no,4,4,4,4.0,sí
+activities.bars,activities,N.° BARRAS,numeric,no,4,4,4,4.0,sí
+activities.angle_planned,activities,ÁNG. PROG.,numeric,no,4,4,4,4.0,sí
+activities.angle_executed,activities,ÁNG. EJEC.,numeric,no,4,4,4,4.0,sí
+activities.deviation_m,activities,DESV. (m),numeric,no,4,3,3,3.5,sí
+activities.deviation_pct,activities,DESV. (%),numeric,no,4,3,3,3.5,sí
+activities.reamed_hole,activities,TAL. REPASADO,free_text,no,3,2,4,2.9,no
+activities.notes,activities,OBSERVACIONES,free_text,no,2,2,1,1.8,no
+delays.code,delays,CÓDIGO,code,if_row,5,3,5,4.4,sí
+delays.start,delays,HORA INICIAL,time,if_row,5,3,3,4.0,sí
+delays.end,delays,HORA FINAL,time,if_row,5,3,3,4.0,sí
+delays.labor,delays,LABOR,master_ref,if_row,4,3,3,3.5,sí
+delays.notes,delays,OBSERVACIÓN,free_text,no,2,2,1,1.8,no
+failures.code,failures,CÓDIGO,code,if_row,5,2,5,4.1,sí
+failures.start,failures,HORA INICIAL,time,if_row,5,2,3,3.7,sí
+failures.end,failures,HORA FINAL,time,if_row,5,2,3,3.7,sí
+failures.total_hours,failures,HORAS TOTALES,numeric,no,4,2,4,3.4,no
+failures.labor,failures,LABOR,master_ref,no,3,2,3,2.7,no
+failures.notes,failures,OBSERVACIÓN,free_text,no,2,2,1,1.8,no
+closing.gallons,closing,N.° GALONES,numeric,no,4,4,4,4.0,sí
+closing.bits,closing,BROCAS,numeric,no,4,4,4,4.0,sí
+closing.rods,closing,BARRAS,numeric,no,4,4,4,4.0,sí
+closing.shank,closing,SHANK,numeric,no,4,4,4,4.0,sí
+closing.location,closing,UBICACIÓN FINAL DEL EQUIPO,master_ref,no,4,4,3,3.8,sí
+closing.tube,closing,TUBO,numeric,no,4,3,4,3.7,sí
+closing.final_state,closing,ESTADO FINAL,free_text,no,3,4,3,3.3,no
+closing.steel_notes,closing,OBSERVACIONES CONTROL DE ACEROS,free_text,no,2,2,1,1.8,no
+closing.general_notes,closing,OBSERVACIONES GENERALES,free_text,no,2,2,1,1.8,no

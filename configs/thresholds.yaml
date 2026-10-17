@@ -1,0 +1,24 @@
+# Metas y umbrales del proyecto (TB1, sección 1.5 y HU08/HU13/HU15/HU16)
+risk_target: 0.01            # error residual máximo en campos aceptados automáticamente
+min_support: 30              # mínimo de aceptados en la mitad de calibración para fijar un umbral
+ece_target: 0.05
+latency_p95_budget_s: 60     # HU13: p95 por formato sin GPU
+
+homologation:
+  threshold: 0.90
+  min_margin: 0.03
+  lev_weight: 0.5
+  per_master:
+    labores: {threshold: 0.90}
+    equipos: {threshold: 0.90}
+    personal: {threshold: 0.88}
+
+targets:
+  IE1_fields: 30
+  IE2_pct: 100
+  IE3_pct: 20
+  IE4_pct: 80
+  IE4_residual_error: 0.01
+  IE5_pct: 5
+  acc_at_1: 0.90
+  recall_at_3: 0.97

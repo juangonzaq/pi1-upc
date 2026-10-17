@@ -1,0 +1,38 @@
+# Perfil smoke: valida el flujo de extremo a extremo en CPU en menos de 15 minutos.
+workspace: data/e2e/smoke
+model:
+  base_checkpoint: microsoft/trocr-small-handwritten
+  batch_size: 32
+synth:
+  historical_forms: 48
+  operational_forms: 14
+  operators: 12
+  new_operators: 2
+  labores: 36
+  equipment: 8
+  max_activity_rows: 5
+  max_delay_rows: 2
+  max_failure_rows: 1
+  history_error_rate: 0.03
+  history_duplicate_rate: 0.03
+  history_missing_rate: 0.03
+  metadata_error_rate: 0.02
+  bad_scans_historical: 1
+  bad_scans_operational: 1
+  workers: 6
+dataset:
+  unseen_operators: 1
+  sprint1_sample: 3
+  reference_subset: 6
+  required_formats: 40
+training:
+  max_steps: 160
+  eval_every: 40
+  patience: 2
+  batch_size: 16
+  lr: 1.0e-4
+cycle:
+  max_steps: 60
+  eval_every: 30
+  patience: 1
+  lr: 5.0e-5
