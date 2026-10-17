@@ -109,7 +109,7 @@ class TrocrRecognizer(RecognitionPort):
                 pv = self._processor(images=batch, return_tensors="pt").pixel_values.to(self.device)
                 gen = self._model.generate(
                     pv, max_new_tokens=self.max_new_tokens, num_beams=1, do_sample=False,
-                    output_logits=True, return_dict_in_generate=True, use_cache=True,
+                    output_logits=True, return_dict_in_generate=True, use_cache=self.device != "mps",  # transformers 5.20: KV cache fails on MPS
                 )
             except RuntimeError as exc:
                 raise RecognizerUnavailable(f"Fallo de inferencia en {self.device}: {exc}") from exc

@@ -235,6 +235,42 @@ def _find_doc(c: Container, prefix: str):  # noqa: ANN202
     return matches[0]
 
 
+evaluate_app = typer.Typer(help="Evaluación de modelos", no_args_is_help=True)
+app.add_typer(evaluate_app, name="evaluate")
+
+
+def _print_text_summary(title: str, s: dict) -> None:
+    typer.echo(f"{title}: CER {s['cer']:.4f} · WER {s['wer']:.4f} · exactitud literal {s['exact']:.3f} (n={s['n']})")
+    for t, v in s["by_type"].items():
+        typer.echo(f"    {t:<11} CER {v['cer']:.4f}  exactos {v['exact']:.3f}  n={v['n']}")
+
+
+@evaluate_app.command("preliminary")
+def evaluate_preliminary(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> dict:
+    """CER inicial por tipo de campo y tiempos por formato sobre los documentos ya procesados (requiere ground truth sintético)."""
+    from perfo.ml.evaluate import crop_items, field_accuracy, form_times, homologation_cases, homologation_eval, summarize_text, text_rows  # noqa: PLC0415
+    from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    gt = GroundTruth(c.workspace / "synth")
+    active = c.registry.get_active()
+    docs = [d.id for d in c.repo.list_documents() if d.metadata.get("form_id") and c.repo.get_field_values(d.id)]
+    items = crop_items(c, docs, gt)
+    recs = {r.crop_id: r for r in c.repo.get_recognitions([i.crop_id for i in items], active.version if active else None)}
+    texts = [recs[i.crop_id].text if i.crop_id in recs else None for i in items]
+    s = summarize_text(text_rows(items, texts))
+    _print_text_summary(f"Modelo {active.version if active else '-'} sobre {len(docs)} formatos", s)
+    fa = field_accuracy(c, items, texts, gt)
+    typer.echo(f"Exactitud por campo (valor tipado/homologado): {fa['field_accuracy']:.3f} (n={fa['n']})")
+    h_lit = homologation_eval(c.homologator, homologation_cases(c, items))
+    h_rec = homologation_eval(c.homologator, homologation_cases(c, items, texts))
+    typer.echo(f"Homologación sobre texto literal: Exactitud@1 {h_lit['acc_at_1']:.3f} · Recall@3 {h_lit['recall_at_3']:.3f} · auto {h_lit['auto_resolved']:.3f} (n={h_lit['n']})")
+    typer.echo(f"Homologación sobre texto reconocido: Exactitud@1 {h_rec['acc_at_1']:.3f} · Recall@3 {h_rec['recall_at_3']:.3f} (n={h_rec['n']})")
+    t = form_times(str(c.workspace / "telemetry" / "events.jsonl"), active.version if active else None)
+    typer.echo(f"Tiempo por formato: p50 {t['p50_s']:.2f} s · p95 {t['p95_s']:.2f} s (n={t['n']})")
+    return {"text": s, "field_accuracy": fa, "homologation_literal": h_lit, "homologation_recognized": h_rec, "times": t}
+
+
 @app.command("status")
 def status(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
     """Resumen de documentos por estado y del modelo activo."""
