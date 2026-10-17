@@ -81,7 +81,7 @@ def text_rows(items: list[CropItem], texts: list[str | None]) -> list[dict[str, 
     for it, t in zip(items, texts, strict=True):
         if it.ref_text is None or it.mark is not None:
             continue
-        rows.append({"form_id": it.form_id, "field_id": it.field_id, "key": it.key, "type": it.field_type, "operator": it.operator,
+        rows.append({"doc_id": it.doc_id, "form_id": it.form_id, "field_id": it.field_id, "key": it.key, "type": it.field_type, "operator": it.operator,
                      "ref": it.ref_text, "hyp": literal(t)})
     return rows
 

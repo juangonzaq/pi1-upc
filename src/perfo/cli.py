@@ -271,6 +271,101 @@ def evaluate_preliminary(profile: str | None = ProfileOpt, workspace: str | None
     return {"text": s, "field_accuracy": fa, "homologation_literal": h_lit, "homologation_recognized": h_rec, "times": t}
 
 
+dataset_app = typer.Typer(help="Dataset por supervisión débil", no_args_is_help=True)
+app.add_typer(dataset_app, name="dataset")
+
+
+def _history_csv(c: Container, history: Path | None) -> Path:
+    if history:
+        return history
+    p = c.workspace / "synth" / "history" / "registro_historico.csv"
+    if not p.exists():
+        raise typer.BadParameter("Indique --history con el CSV histórico exportado")
+    return p
+
+
+@dataset_app.command("build")
+def dataset_build(
+    history: Path | None = typer.Option(None, "--history", help="CSV histórico (registro_id, fecha, guardia, equipo, campo, valor)"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Alinea los formatos con el histórico (fecha, guardia, equipo), deriva etiquetas literales, particiona y congela el test."""
+    from perfo.ml.pipeline import build_dataset  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    res = build_dataset(c, _history_csv(c, history), log=typer.echo)
+    typer.echo(json.dumps(res["stats"]["by_split_formats"], ensure_ascii=False))
+
+
+@app.command("train")
+def train_cmd(
+    lora: bool = typer.Option(False, "--lora", help="Ajuste con LoRA en lugar de ajuste completo"),
+    max_steps: int | None = typer.Option(None, help="Sobrescribe training.max_steps"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Ajusta TrOCR con el dataset propio (early stopping con la mitad de selección). Registra un candidato."""
+    from perfo.ml.pipeline import finetune, latest_initial_snapshot, load_snapshot_items  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    snap = latest_initial_snapshot(c)
+    if snap is None:
+        raise typer.BadParameter("No hay dataset; ejecute 'perfo dataset build'")
+    cfg = dict(c.cfg["training"])
+    cfg["lora"] = lora or bool(cfg.get("lora"))
+    if max_steps:
+        cfg["max_steps"] = max_steps
+    info = finetune(c, load_snapshot_items(c, snap), snap, train_cfg=cfg, log=typer.echo)
+    typer.secho(f"Candidato registrado: {info.version} (sha256 {info.artifact_sha256[:12]}…)", fg="green")
+
+
+@evaluate_app.command("models")
+def evaluate_models_cmd(
+    versions: list[str] = typer.Argument(None, help="Versiones a comparar (por defecto: línea base y último candidato)"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Compara modelos en el conjunto de prueba congelado: CER, WER, exactitud por campo y por tipo, operadores no vistos."""
+    from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
+    from perfo.ml.pipeline import SPLIT_VERSION, baseline_version, evaluate_models  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    split = c.repo.get_split(SPLIT_VERSION)
+    if not versions:
+        cands = [i.version for i in c.registry.list() if i.parent]
+        versions = [baseline_version(c)] + cands[-1:]
+    res = evaluate_models(c, versions, split, GroundTruth(c.workspace / "synth"), log=typer.echo)
+    if "relative_cer_reduction_pct" in res:
+        typer.secho(f"Reducción relativa de CER ({versions[0]} → {versions[1]}): {res['relative_cer_reduction_pct']:.1f} %", fg="cyan")
+    c.registry.attach(versions[-1], "evaluation", res)
+
+
+@app.command("calibrate")
+def calibrate_cmd(version: str | None = typer.Argument(None), profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """Escalado de temperatura por tipo de campo y umbral en la curva cobertura–riesgo (mitad de calibración)."""
+    from perfo.ml.pipeline import SPLIT_VERSION, calibrate, latest_initial_snapshot, load_snapshot_items  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    version = version or [i.version for i in c.registry.list() if i.parent][-1]
+    calibrate(c, version, c.repo.get_split(SPLIT_VERSION), load_snapshot_items(c, latest_initial_snapshot(c)), log=typer.echo)
+
+
+@evaluate_app.command("routing")
+def evaluate_routing_cmd(version: str | None = typer.Argument(None), profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """ECE, curva cobertura–riesgo e IE4 en el conjunto de prueba congelado."""
+    from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
+    from perfo.ml.pipeline import SPLIT_VERSION, evaluate_routing  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    version = version or [i.version for i in c.registry.list() if i.parent][-1]
+    res = evaluate_routing(c, version, c.repo.get_split(SPLIT_VERSION)["test"], GroundTruth(c.workspace / "synth"), log=typer.echo)
+    for t, v in res["by_type"].items():
+        typer.echo(f"    {t:<11} cobertura {v['coverage']:.3f} ({v['auto']}/{v['n']}) · riesgo {v['risk']:.4f} · umbral {v['threshold']}")
+    typer.echo(f"  Motivos de revisión: {res['review_reasons']}")
+    c.registry.attach(version, "routing_test", {k: v for k, v in res.items() if k not in ("curve",)})
+
+
 @app.command("status")
 def status(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
     """Resumen de documentos por estado y del modelo activo."""
