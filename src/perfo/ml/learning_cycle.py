@@ -81,7 +81,7 @@ def corrections_to_examples(c: Any, split: dict[str, Any], include_positives: bo
     return out, excluded
 
 
-def measure_latency(c: Any, version: str, doc_ids: list[str], max_docs: int = 8) -> dict[str, float]:
+def measure_latency(c: Any, version: str, doc_ids: list[str], max_docs: int = 5) -> dict[str, float]:
     """Per-format latency: preprocessing + segmentation + recognition of the readable crops (no persistence)."""
     rec = c.recognizer(version)
     times = []

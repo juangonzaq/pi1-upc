@@ -42,3 +42,34 @@ class GroundTruth:
     def mark(self, form_id: str, field_id: str) -> str | None:
         f = self.fields(form_id).get(field_id)
         return f["mark"] if f else None
+
+
+class ReferenceGroundTruth(GroundTruth):
+    """Real data: double-entry reference transcription (HU02) with the same interface.
+
+    CSV columns: archivo, campo, valor, texto[, operador]. `archivo` is the scanned file name (source_name), used as form_id;
+    `valor` is the canonical value (codes for masters, HH:MM, ISO dates); `texto` is the literal transcription.
+    """
+
+    def __init__(self, csv_path: str | Path):  # noqa: D107 (no synthetic manifest)
+        import csv  # noqa: PLC0415
+
+        self.dir = Path(csv_path).parent
+        self.manifest = {"forms": [], "supervisors": []}
+        self._data: dict[str, dict[str, dict[str, Any]]] = {}
+        self._forms = {}
+        with open(csv_path, encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                fid = row["archivo"]
+                self._data.setdefault(fid, {})[row["campo"]] = {"value": row.get("valor") or None, "text": row.get("texto") or None, "mark": None}
+                self._forms.setdefault(fid, {"form_id": fid, "operator": row.get("operador"), "gt": None})
+
+    def fields(self, form_id: str) -> dict[str, dict[str, Any]]:  # type: ignore[override]
+        return self._data.get(form_id, {})
+
+
+def load_ground_truth(workspace: Path, reference_csv: str | Path | None = None) -> GroundTruth:
+    """Reference CSV when given (real data); otherwise the synthetic manifest of the workspace."""
+    if reference_csv:
+        return ReferenceGroundTruth(reference_csv)
+    return GroundTruth(Path(workspace) / "synth")

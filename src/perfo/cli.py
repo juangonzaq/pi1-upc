@@ -17,6 +17,7 @@ template_app = typer.Typer(help="Plantilla del formato", no_args_is_help=True)
 app.add_typer(template_app, name="template")
 
 ProfileOpt = typer.Option(None, "--profile", "-p", help="Perfil de configuración (smoke | full)")
+ReferenceOpt = typer.Option(None, "--reference", help="CSV de referencia por doble digitación (datos reales); por defecto, el ground truth sintético")
 WorkspaceOpt = typer.Option(None, "--workspace", "-w", help="Carpeta de trabajo (sobrescribe la del perfil)")
 
 
@@ -135,7 +136,8 @@ def masters_import_dir(directory: Path = typer.Argument(..., exists=True), profi
             typer.echo(f"  {mtype}: versión {version} vigente ({len(c.masters.get_master(mtype).items)} registros)")
 
 
-def _iter_inputs(c: Container, paths: list[Path], from_synth: str | None) -> list[tuple[bytes, dict]]:
+def _iter_inputs(c: Container, paths: list[Path], from_synth: str | None, metadata_csv: Path | None = None,
+                 batch: str = "historical", user: str = "cli") -> list[tuple[bytes, dict]]:
     items: list[tuple[bytes, dict]] = []
     if from_synth:
         man = json.loads((c.workspace / "synth" / "manifest.json").read_text())
@@ -150,10 +152,20 @@ def _iter_inputs(c: Container, paths: list[Path], from_synth: str | None) -> lis
             src = next(f for f in man["forms"] if f["form_id"] == man["rescan"]["form_id"])
             items.append((p.read_bytes(), {"source_name": p.name, "uploaded_by": "secretaria.sim", "business_key": src["metadata_key"],
                                            "batch": "operational", "form_id": src["form_id"], "rescan": True}))
+    meta_by_file: dict[str, dict] = {}
+    if metadata_csv:
+        from perfo.domain.parsing import parse_date  # noqa: PLC0415
+
+        with open(metadata_csv, encoding="utf-8-sig", newline="") as fh:
+            for row in csv.DictReader(fh):
+                d = parse_date(row["fecha"])
+                key = f"{d.value if d.ok else row['fecha']}|{row['guardia'].strip().upper()}|{row['equipo'].strip()}"
+                meta_by_file[row["archivo"].strip()] = {"business_key": key, **({"batch": row["lote"]} if row.get("lote") else {})}
     for path in paths:
         files = sorted(x for x in path.rglob("*") if x.suffix.lower() in (".jpg", ".jpeg", ".png", ".pdf")) if path.is_dir() else [path]
         for fp in files:
-            items.append((fp.read_bytes(), {"source_name": fp.name, "uploaded_by": "cli"}))
+            meta = {"source_name": fp.name, "uploaded_by": user, "form_id": fp.name, "batch": batch, **meta_by_file.get(fp.name, {})}
+            items.append((fp.read_bytes(), meta))
     return items
 
 
@@ -161,6 +173,9 @@ def _iter_inputs(c: Container, paths: list[Path], from_synth: str | None) -> lis
 def ingest(
     paths: list[Path] = typer.Argument(None, help="Archivos o carpetas con escaneos (JPG, PNG o PDF)"),
     from_synth: str | None = typer.Option(None, "--from-synth", help="historical | operational | all (usa el manifiesto sintético)"),
+    metadata: Path | None = typer.Option(None, "--metadata", help="CSV con archivo, fecha, guardia, equipo[, lote] para escaneos reales"),
+    batch: str = typer.Option("historical", "--batch", help="Lote de los escaneos reales: historical | operational"),
+    user: str = typer.Option("cli", "--user", "-u", help="Usuario que carga"),
     enqueue: bool = typer.Option(True, help="Encolar para procesamiento"),
     profile: str | None = ProfileOpt,
     workspace: str | None = WorkspaceOpt,
@@ -170,7 +185,7 @@ def ingest(
 
     c = container(profile, workspace)
     outcomes: Counter = Counter()
-    for data, meta in _iter_inputs(c, paths or [], from_synth):
+    for data, meta in _iter_inputs(c, paths or [], from_synth, metadata, batch, user):
         try:
             doc_id = c.ingestion.submit(data, meta)
         except IngestionRejected as exc:
@@ -226,11 +241,20 @@ def doc_show(doc_id: str, profile: str | None = ProfileOpt, workspace: str | Non
             typer.echo(f"    {v.route:<6} {v.field_id:<28} texto={v.text!r:<22} valor={v.value!r:<14} conf={conf} {reasons}")
 
 
+def _gt(c: Container, reference: Path | None):  # noqa: ANN202
+    from perfo.ml.groundtruth import load_ground_truth  # noqa: PLC0415
+
+    return load_ground_truth(c.workspace, reference)
+
+
 def _find_doc(c: Container, prefix: str):  # noqa: ANN202
     doc = c.repo.get_document(prefix)
     if doc:
         return doc
     matches = [d for d in c.repo.list_documents() if d.id.startswith(prefix) or (d.metadata.get("form_id") == prefix)]
+    if len(matches) > 1:  # a re-scan shares the form id: prefer the active document
+        active = [d for d in matches if d.state.value != "DUPLICADO_PENDIENTE"]
+        matches = active if len(active) == 1 else matches
     if len(matches) != 1:
         raise typer.BadParameter(f"No se encontró un único documento para '{prefix}' ({len(matches)} coincidencias)")
     return matches[0]
@@ -247,13 +271,13 @@ def _print_text_summary(title: str, s: dict) -> None:
 
 
 @evaluate_app.command("preliminary")
-def evaluate_preliminary(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> dict:
+def evaluate_preliminary(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt, reference: Path | None = ReferenceOpt) -> dict:
     """CER inicial por tipo de campo y tiempos por formato sobre los documentos ya procesados (requiere ground truth sintético)."""
     from perfo.ml.evaluate import crop_items, field_accuracy, form_times, homologation_cases, homologation_eval, summarize_text, text_rows  # noqa: PLC0415
     from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
 
     c = container(profile, workspace)
-    gt = GroundTruth(c.workspace / "synth")
+    gt = _gt(c, reference)
     active = c.registry.get_active()
     docs = [d.id for d in c.repo.list_documents() if d.metadata.get("form_id") and c.repo.get_field_values(d.id)]
     items = crop_items(c, docs, gt)
@@ -325,8 +349,7 @@ def train_cmd(
 def evaluate_models_cmd(
     versions: list[str] = typer.Argument(None, help="Versiones a comparar (por defecto: línea base y último candidato)"),
     profile: str | None = ProfileOpt,
-    workspace: str | None = WorkspaceOpt,
-) -> None:
+    workspace: str | None = WorkspaceOpt, reference: Path | None = ReferenceOpt) -> None:
     """Compara modelos en el conjunto de prueba congelado: CER, WER, exactitud por campo y por tipo, operadores no vistos."""
     from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
     from perfo.ml.pipeline import SPLIT_VERSION, baseline_version, evaluate_models  # noqa: PLC0415
@@ -336,7 +359,7 @@ def evaluate_models_cmd(
     if not versions:
         cands = [i.version for i in c.registry.list() if i.parent]
         versions = [baseline_version(c)] + cands[-1:]
-    res = evaluate_models(c, versions, split, GroundTruth(c.workspace / "synth"), log=typer.echo)
+    res = evaluate_models(c, versions, split, _gt(c, reference), log=typer.echo)
     if "relative_cer_reduction_pct" in res:
         typer.secho(f"Reducción relativa de CER ({versions[0]} → {versions[1]}): {res['relative_cer_reduction_pct']:.1f} %", fg="cyan")
     c.registry.attach(versions[-1], "evaluation", res)
@@ -357,15 +380,14 @@ def evaluate_routing_cmd(
     version: str | None = typer.Argument(None),
     plots: bool = typer.Option(True, help="Genera los gráficos PNG"),
     profile: str | None = ProfileOpt,
-    workspace: str | None = WorkspaceOpt,
-) -> None:
+    workspace: str | None = WorkspaceOpt, reference: Path | None = ReferenceOpt) -> None:
     """ECE, curva cobertura–riesgo e IE4 en el conjunto de prueba congelado."""
     from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
     from perfo.ml.pipeline import SPLIT_VERSION, evaluate_routing  # noqa: PLC0415
 
     c = container(profile, workspace)
     version = version or [i.version for i in c.registry.list() if i.parent][-1]
-    res = evaluate_routing(c, version, c.repo.get_split(SPLIT_VERSION)["test"], GroundTruth(c.workspace / "synth"), log=typer.echo)
+    res = evaluate_routing(c, version, c.repo.get_split(SPLIT_VERSION)["test"], _gt(c, reference), log=typer.echo)
     for t, v in res["by_type"].items():
         typer.echo(f"    {t:<11} cobertura {v['coverage']:.3f} ({v['auto']}/{v['n']}) · riesgo {v['risk']:.4f} · umbral {v['threshold']}")
     typer.echo(f"  Motivos de revisión: {res['review_reasons']}")
@@ -486,8 +508,7 @@ def review_oracle(
     approve: bool = typer.Option(True, help="Simula además la aprobación del Jefe de Guardia"),
     observe_rate: float = typer.Option(0.15),
     profile: str | None = ProfileOpt,
-    workspace: str | None = WorkspaceOpt,
-) -> None:
+    workspace: str | None = WorkspaceOpt, reference: Path | None = ReferenceOpt) -> None:
     """Validación humana simulada con el ground truth sintético (solo toca campos enrutados a revisión)."""
     import random  # noqa: PLC0415
 
@@ -495,7 +516,7 @@ def review_oracle(
     from perfo.synth.oracle import oracle_decisions, shift_boss_decision  # noqa: PLC0415
 
     c = container(profile, workspace)
-    gt = GroundTruth(c.workspace / "synth")
+    gt = _gt(c, reference)
     rng = random.Random(int(c.cfg["seed"]) + 7)
     sup = gt.manifest.get("supervisors", [])
     tot = Counter()
@@ -564,20 +585,20 @@ def _print_gates(gates: list[dict]) -> None:
 
 
 @cycle_app.command("run")
-def cycle_run(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+def cycle_run(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt, reference: Path | None = ReferenceOpt) -> None:
     """Cierre de ciclo: snapshot de correcciones, reentrenamiento con replay, recalibración y compuertas G1–G5."""
     from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
     from perfo.ml.learning_cycle import run_cycle  # noqa: PLC0415
 
     c = container(profile, workspace)
-    res = run_cycle(c, GroundTruth(c.workspace / "synth"), log=typer.echo)
+    res = run_cycle(c, _gt(c, reference), log=typer.echo)
     typer.echo(f"Estado del ciclo: {res['status']}")
     if res.get("candidate"):
         typer.echo(f"Candidato {res['candidate']} · IE5 = {res['ie5_pct']:.1f} % · promover con: perfo promote {res['candidate']} --approver <nombre>")
 
 
 @app.command("gates")
-def gates_cmd(version: str, profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+def gates_cmd(version: str, profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt, reference: Path | None = ReferenceOpt) -> None:
     """Evalúa las compuertas de un candidato frente al modelo activo (p. ej., el primer modelo ajustado)."""
     from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
     from perfo.ml.learning_cycle import evaluate_gates  # noqa: PLC0415
@@ -588,7 +609,7 @@ def gates_cmd(version: str, profile: str | None = ProfileOpt, workspace: str | N
     info = c.registry.get(version)
     items = load_snapshot_items(c, info.metadata.get("dataset_snapshot") or latest_initial_snapshot(c))
     ok = all(i.sha256 and c.storage.exists(i.object_key) for i in items)
-    evaluate_gates(c, version, active.version, GroundTruth(c.workspace / "synth"), items, ok, 0, log=typer.echo)
+    evaluate_gates(c, version, active.version, _gt(c, reference), items, ok, 0, log=typer.echo)
 
 
 @app.command("promote")
@@ -623,6 +644,19 @@ def registry_list(profile: str | None = ProfileOpt, workspace: str | None = Work
         gates = c.registry.read_attachment(i.version, "gates")
         mark = "*" if active and i.version == active.version else " "
         typer.echo(f"{mark} {i.version:<34} {i.status:<10} padre={i.parent or '-':<34} calibración={'sí' if cal else 'no'}  {gate_summary(gates['gates']) if gates else ''}")
+
+
+@app.command("e2e")
+def e2e_cmd(
+    profile: str = typer.Option("smoke", "--profile", "-p", help="smoke | full"),
+    device: str | None = typer.Option(None, "--device", help="auto | cpu | mps | cuda (por defecto, el de la configuración)"),
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Flujo de prueba de extremo a extremo: genera, procesa, ajusta, calibra, valida, aprende y reporta."""
+    from perfo.e2e import run_e2e  # noqa: PLC0415
+
+    R = run_e2e(profile, device=device, workspace=workspace, log=typer.echo)
+    typer.secho(f"Reporte: {R['report_paths']['markdown']}", fg="green")
 
 
 @app.command("status")

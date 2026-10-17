@@ -149,8 +149,15 @@ def finetune(c: Any, items: list[LabeledCrop], snapshot_id: str, parent: str | N
 
 
 def _texts_for(c: Any, version: str, items: list[CropItem], temps: list[float] | None = None) -> tuple[list[str | None], list[Any]]:
-    rec = c.recognizer(version, calibrated=False)
-    stats = infer_items(rec, c.storage, items, temps)
+    """Inference with an in-process cache: (model, crop) -> TokenStats over the full temperature grid."""
+    grid = sorted({1.0, *[float(t) for t in c.cfg["calibration"]["temperatures"]], *(temps or [])})
+    cache = c.__dict__.setdefault("_infer_cache", {})
+    missing = [it for it in items if (version, it.crop_id) not in cache and it.object_key and it.mark is None]
+    if missing:
+        rec = c.recognizer(version, calibrated=False)
+        for it, st in zip(missing, infer_items(rec, c.storage, missing, grid), strict=True):
+            cache[(version, it.crop_id)] = st
+    stats = [cache.get((version, it.crop_id)) for it in items]
     return [s.text if s is not None else None for s in stats], stats
 
 
@@ -161,7 +168,12 @@ def evaluate_models(c: Any, versions: list[str], split: dict[str, Any], gt: Grou
     results: dict[str, Any] = {"n_formats": len(split["test"]), "n_crops": len(items), "models": {}}
     for v in versions:
         t0 = time.perf_counter()
-        texts, _ = _texts_for(c, v, items)
+        stored = {r.crop_id: r.text for r in c.repo.get_recognitions([i.crop_id for i in items], v)}
+        readable = [i for i in items if i.object_key and i.mark is None]
+        if readable and all(i.crop_id in stored for i in readable):
+            texts = [stored.get(i.crop_id) if i.mark is None else None for i in items]  # same greedy decoding, already persisted
+        else:
+            texts, _ = _texts_for(c, v, items)
         rows = text_rows(items, texts)
         summ = summarize_text(rows)
         fa = field_accuracy(c, items, texts, gt)
@@ -247,7 +259,9 @@ def calibrate(c: Any, version: str, split: dict[str, Any], labeled_items: list[L
         rs = [r for r in labeled_records if r["type"] == ftype]
         ch = choose_threshold(np.array([r["conf"] for r in rs]), np.array([r["correct"] for r in rs]), np.array([r["gate_ok"] for r in rs]),
                               float(th["risk_target"]), int(th["min_support"]))
-        thresholds[ftype] = ch["threshold"] if temperatures.get(ftype) is not None else None
+        if temperatures.get(ftype) is None:
+            ch = {"threshold": None, "coverage": 0.0, "risk": None, "accepted": 0, "reason": "sin_temperatura", "n": details.get(ftype, {}).get("n", 0)}
+        thresholds[ftype] = ch["threshold"]
         thr_details[ftype] = ch
     profile = {
         "id": f"cal-{version}-{hashlib.sha256(json.dumps(temperatures, sort_keys=True).encode()).hexdigest()[:8]}",

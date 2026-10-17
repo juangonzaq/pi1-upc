@@ -110,7 +110,28 @@ def preprocess(image_bytes: bytes, template: Template, reference_path: str, cfg:
     if not (0.4 < det < 2.5):
         return PreprocessResult(False, f"Transformación implausible (escala {det:.2f})", None, tr)
     oriented_bgr = img if rot == 0 else cv2.rotate(img, {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}[rot])
-    aligned = cv2.warpPerspective(oriented_bgr, H_full, (template.width, template.height), flags=cv2.INTER_LINEAR,
-                                  borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+
+    def warp(H: np.ndarray) -> np.ndarray:
+        return cv2.warpPerspective(oriented_bgr, H, (template.width, template.height), flags=cv2.INTER_LINEAR,
+                                   borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+
+    aligned = warp(H_full)
+    # stage 2: local refinement with the template anchors (table and header corners)
+    from perfo.application.segment import check_alignment  # noqa: PLC0415
+
+    before = check_alignment(cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY), template, reference_path)
+    good = [a for a in before["anchors"] if a["score"] > 0.5]
+    tr["residual_before_refine_px"] = before["max_offset_px"]
+    if len(good) >= 6 and before["max_offset_px"] > 1:
+        src = np.float32([[a["anchor"][0] + a["dx"], a["anchor"][1] + a["dy"]] for a in good])
+        dst = np.float32([a["anchor"] for a in good])
+        H_ref, _ = cv2.findHomography(src, dst, 0)
+        if H_ref is not None:
+            refined = warp(H_ref @ H_full)
+            after = check_alignment(cv2.cvtColor(refined, cv2.COLOR_BGR2GRAY), template, reference_path)
+            if after["max_offset_px"] < before["max_offset_px"]:
+                aligned, H_full = refined, H_ref @ H_full
+                tr["refined_by_anchors"] = True
+                tr["residual_after_refine_px"] = after["max_offset_px"]
     tr["homography"] = [[round(float(v), 8) for v in row] for row in H_full]
     return PreprocessResult(True, None, aligned, tr)
