@@ -552,6 +552,79 @@ def trace_cmd(doc_id: str, field_id: str, profile: str | None = ProfileOpt, work
     typer.echo(json.dumps(c.validation.trace(doc.id, field_id), indent=2, ensure_ascii=False, default=str))
 
 
+cycle_app = typer.Typer(help="Aprendizaje continuo", no_args_is_help=True)
+app.add_typer(cycle_app, name="cycle")
+registry_app = typer.Typer(help="Registro de modelos", no_args_is_help=True)
+app.add_typer(registry_app, name="registry")
+
+
+def _print_gates(gates: list[dict]) -> None:
+    for g in gates:
+        typer.secho(f"    {g['gate']} {g['name']:<13} {'✔' if g['passed'] else '✘'}  {g['detail']}", fg="green" if g["passed"] else "red")
+
+
+@cycle_app.command("run")
+def cycle_run(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """Cierre de ciclo: snapshot de correcciones, reentrenamiento con replay, recalibración y compuertas G1–G5."""
+    from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
+    from perfo.ml.learning_cycle import run_cycle  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    res = run_cycle(c, GroundTruth(c.workspace / "synth"), log=typer.echo)
+    typer.echo(f"Estado del ciclo: {res['status']}")
+    if res.get("candidate"):
+        typer.echo(f"Candidato {res['candidate']} · IE5 = {res['ie5_pct']:.1f} % · promover con: perfo promote {res['candidate']} --approver <nombre>")
+
+
+@app.command("gates")
+def gates_cmd(version: str, profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """Evalúa las compuertas de un candidato frente al modelo activo (p. ej., el primer modelo ajustado)."""
+    from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
+    from perfo.ml.learning_cycle import evaluate_gates  # noqa: PLC0415
+    from perfo.ml.pipeline import latest_initial_snapshot, load_snapshot_items  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    active = c.registry.get_active() or c.ensure_baseline()
+    info = c.registry.get(version)
+    items = load_snapshot_items(c, info.metadata.get("dataset_snapshot") or latest_initial_snapshot(c))
+    ok = all(i.sha256 and c.storage.exists(i.object_key) for i in items)
+    evaluate_gates(c, version, active.version, GroundTruth(c.workspace / "synth"), items, ok, 0, log=typer.echo)
+
+
+@app.command("promote")
+def promote_cmd(
+    version: str,
+    approver: str = typer.Option(..., "--approver", "-a", help="Rol autorizado que aprueba la promoción (G6)"),
+    note: str = typer.Option("", "--note"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Promoción explícita (G6): registra quién aprobó, la fecha, la versión y la evidencia. Se rechaza si falla una compuerta."""
+    from perfo.ml.learning_cycle import promote  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    res = promote(c, version, approver, note=note)
+    if res["promoted"]:
+        typer.secho(f"Promovido {version} (antes {res['previous']}); evidencia {res['evidence']}", fg="green")
+    else:
+        typer.secho(f"Promoción rechazada: compuertas fallidas {res['failed']}; el modelo activo sigue siendo {res['active']}", fg="red")
+        raise typer.Exit(1)
+
+
+@registry_app.command("list")
+def registry_list(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+    """Versiones de modelo con su estado, padre, calibración y compuertas."""
+    from perfo.ml.learning_cycle import gate_summary  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    active = c.registry.get_active()
+    for i in c.registry.list():
+        cal = c.registry.read_attachment(i.version, "calibration")
+        gates = c.registry.read_attachment(i.version, "gates")
+        mark = "*" if active and i.version == active.version else " "
+        typer.echo(f"{mark} {i.version:<34} {i.status:<10} padre={i.parent or '-':<34} calibración={'sí' if cal else 'no'}  {gate_summary(gates['gates']) if gates else ''}")
+
+
 @app.command("status")
 def status(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
     """Resumen de documentos por estado y del modelo activo."""

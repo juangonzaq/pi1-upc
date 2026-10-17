@@ -63,9 +63,11 @@ calibration:
   min_samples: 20          # mínimo de recortes por tipo para ajustar la temperatura
 
 cycle:
-  replay_ratio: 2.0          # ejemplos históricos por cada corrección
+  replay_ratio: 2.0          # ejemplos históricos por cada ejemplo nuevo (mitiga el olvido catastrófico)
+  correction_weight: 2       # sobremuestreo de las correcciones (los casos más informativos)
   include_confirmed_positives: true
   max_steps: 400
   eval_every: 100
   patience: 2
-  lr: 3.0e-5
+  lr: 2.0e-5
+  warmup_ratio: 0.2

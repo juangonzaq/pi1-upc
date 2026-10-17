@@ -32,7 +32,6 @@ training:
   batch_size: 16
   lr: 1.0e-4
 cycle:
-  max_steps: 60
+  max_steps: 120
   eval_every: 30
-  patience: 1
-  lr: 5.0e-5
+  patience: 2
