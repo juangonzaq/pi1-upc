@@ -4,8 +4,8 @@ model:
   base_checkpoint: microsoft/trocr-small-handwritten
   batch_size: 32
 synth:
-  historical_forms: 48
-  operational_forms: 14
+  historical_forms: 80
+  operational_forms: 16
   operators: 12
   new_operators: 2
   labores: 36
@@ -24,7 +24,7 @@ dataset:
   unseen_operators: 1
   sprint1_sample: 3
   reference_subset: 6
-  required_formats: 40
+  required_formats: 70
 training:
   max_steps: 160
   eval_every: 40

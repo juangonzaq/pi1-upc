@@ -352,7 +352,12 @@ def calibrate_cmd(version: str | None = typer.Argument(None), profile: str | Non
 
 
 @evaluate_app.command("routing")
-def evaluate_routing_cmd(version: str | None = typer.Argument(None), profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
+def evaluate_routing_cmd(
+    version: str | None = typer.Argument(None),
+    plots: bool = typer.Option(True, help="Genera los gráficos PNG"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
     """ECE, curva cobertura–riesgo e IE4 en el conjunto de prueba congelado."""
     from perfo.ml.groundtruth import GroundTruth  # noqa: PLC0415
     from perfo.ml.pipeline import SPLIT_VERSION, evaluate_routing  # noqa: PLC0415
@@ -363,7 +368,14 @@ def evaluate_routing_cmd(version: str | None = typer.Argument(None), profile: st
     for t, v in res["by_type"].items():
         typer.echo(f"    {t:<11} cobertura {v['coverage']:.3f} ({v['auto']}/{v['n']}) · riesgo {v['risk']:.4f} · umbral {v['threshold']}")
     typer.echo(f"  Motivos de revisión: {res['review_reasons']}")
-    c.registry.attach(version, "routing_test", {k: v for k, v in res.items() if k not in ("curve",)})
+    c.registry.attach(version, "routing_test", res)
+    if plots:
+        from perfo.reporting.plots import coverage_risk_plot, reliability_plot  # noqa: PLC0415
+
+        out = c.workspace / "reports"
+        out.mkdir(exist_ok=True)
+        typer.echo(f"  Gráficos: {coverage_risk_plot(res, float(c.cfg['thresholds']['risk_target']), out / f'cobertura_riesgo_{version}.png')}")
+        typer.echo(f"            {reliability_plot(res, out / f'fiabilidad_{version}.png')}")
 
 
 @app.command("status")
