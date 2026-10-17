@@ -154,9 +154,14 @@ Estados del documento: `CARGADO → EN_COLA → PROCESADO → EN_REVISION → VA
 
 **Calibración y enrutamiento.**
 - Se usa escalado de temperatura por tipo de campo, ajustado en la mitad de calibración.
+- La temperatura se ajusta contra la correctitud del valor tipado u homologado (`calibration.target: value`), que es lo que decide el enrutamiento. El ECE también se mide sobre el valor; el ECE sobre texto literal se informa aparte.
 - El umbral es el punto de mayor cobertura con error residual ≤ 1 %, con un soporte mínimo configurable.
 - Un tipo de campo sin temperatura o sin umbral nunca se acepta automáticamente.
 - Una regla violada o una homologación bajo su umbral fuerzan la revisión.
+- Para certificar un riesgo ≤ 1 %, las etiquetas de la mitad de calibración deben tener menos error que ese 1 %. Las del histórico tienen errores de transcripción (el TB1 estima 4 %), así que se recomienda verificar esa mitad por doble digitación, igual que el subconjunto de prueba.
+
+**Entrenamiento.**
+- Hay *early stopping* con la mitad de selección, pero no puede activarse antes del 75 % de los pasos (`training.min_steps_ratio`). Al inicio del ajuste la CER de selección empeora antes de mejorar.
 
 **Dataset por supervisión débil.**
 - El histórico guarda valores normalizados (códigos, horas en 24 h), no lo que está escrito.
