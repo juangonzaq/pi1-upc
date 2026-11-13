@@ -32,9 +32,11 @@ class SegmentationResult:
 
 
 def _anchors(template: Template) -> list[tuple[int, int]]:
-    pts: list[tuple[int, int]] = []
     raw = template.raw
     W, H = template.width, template.height
+    if raw.get("anchors"):  # explicit anchors (outer frame corners) declared by the template
+        return [(round(x * W), round(y * H)) for x, y in raw["anchors"]]
+    pts: list[tuple[int, int]] = []
     for t in raw.get("tables", []):
         x0, y0, x1, y1 = t["box"]
         pts += [(round(x0 * W), round(y0 * H)), (round(x1 * W), round(y0 * H)), (round(x0 * W), round(y1 * H)), (round(x1 * W), round(y1 * H))]
@@ -49,11 +51,11 @@ def _reference_gray(path: str) -> np.ndarray:
     return cv2.imread(path, cv2.IMREAD_GRAYSCALE)
 
 
-def check_alignment(aligned_gray: np.ndarray, template: Template, reference_path: str) -> dict[str, Any]:
+def check_alignment(aligned_gray: np.ndarray, template: Template, reference_path: str, search_px: int | None = None) -> dict[str, Any]:
     """Measures residual misalignment at template anchors (table and header corners)."""
     ref = _reference_gray(reference_path)
     tol = template.alignment.tolerance_px
-    half, search = 60, int(tol * 2 + 10)
+    half, search = 60, int(search_px or tol * 2 + 10)
     offsets = []
     for x, y in _anchors(template):
         tpl = ref[max(0, y - half) : y + half, max(0, x - half) : x + half]
@@ -66,8 +68,11 @@ def check_alignment(aligned_gray: np.ndarray, template: Template, reference_path
         exp_x, exp_y = max(0, x - half) - x0, max(0, y - half) - y0
         dx, dy = loc[0] - exp_x, loc[1] - exp_y
         offsets.append({"anchor": [x, y], "dx": int(dx), "dy": int(dy), "score": round(float(score), 3)})
-    worst = max((max(abs(o["dx"]), abs(o["dy"])) if o["score"] > 0.3 else 999 for o in offsets), default=999)
-    return {"anchors": offsets, "max_offset_px": worst, "tolerance_px": tol, "ok": worst <= tol}
+    errors = sorted(max(abs(o["dx"]), abs(o["dy"])) if o["score"] > 0.3 else 999 for o in offsets)
+    allowed = int(template.alignment.max_outlier_ratio * len(errors))  # 0 by default: every anchor must agree
+    worst = errors[-(allowed + 1)] if len(errors) > allowed else 999
+    outliers = sum(1 for e in errors if e > tol)
+    return {"anchors": offsets, "max_offset_px": worst, "tolerance_px": tol, "ok": worst <= tol, "outliers": outliers}
 
 
 def _drop_red(bgr: np.ndarray) -> np.ndarray:
@@ -77,6 +82,30 @@ def _drop_red(bgr: np.ndarray) -> np.ndarray:
     out = bgr.copy()
     out[red] = (250, 250, 250)
     return out
+
+
+def _flat_paper(img: np.ndarray) -> np.ndarray:
+    """Divides by the paper itself: a photo's shading must not read as ink."""
+    h, w = img.shape[:2]
+    paper = cv2.morphologyEx(cv2.resize(img, (w // 4, h // 4), interpolation=cv2.INTER_AREA), cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    paper = cv2.resize(cv2.GaussianBlur(paper, (0, 0), 8), (w, h), interpolation=cv2.INTER_LINEAR)
+    return np.clip(img.astype(np.float32) / np.maximum(paper, 1) * 255, 0, 255).astype(np.uint8)
+
+
+def _clean_photo(aligned_bgr: np.ndarray, threshold: int) -> np.ndarray:
+    """Flat paper and no ruled lines: at 110 ppp the lines are as thick as a stroke and cross every cell."""
+    dark = _drop_red(_flat_paper(aligned_bgr)).min(axis=2)  # the darkest channel: blue pen barely shows in gray
+    faint = 228  # a pale pen on flat paper: the fixed threshold would cut its strokes
+    ink = (dark < faint).astype(np.uint8)
+    lines = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((1, 45), np.uint8))
+    for lean in (-3, -1, 0, 1, 3):  # the column lines of a photo lean a little
+        kernel = cv2.line(np.zeros((40, 7), np.uint8), (3 + lean, 0), (3 - lean, 39), 1, 1)
+        lines |= cv2.morphologyEx(ink, cv2.MORPH_OPEN, kernel)
+    ink[cv2.dilate(lines, np.ones((5, 5), np.uint8)) > 0] = 0
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    keep = stats[:, cv2.CC_STAT_AREA] >= 40  # what is left of a line is smaller than any stroke
+    keep[0] = False
+    return cv2.cvtColor(np.where(keep[labels], dark * (threshold / faint), 255).astype(np.uint8), cv2.COLOR_GRAY2BGR)
 
 
 def _ink_mask(gray: np.ndarray, threshold: int, min_px: int) -> np.ndarray:
@@ -108,11 +137,16 @@ def segment(aligned_bgr: np.ndarray, template: Template, reference_path: str, cf
 
     inset = int(cfg.get("inset_px", 4))
     thr = int(cfg.get("binarize_threshold", 165))
+    if template.raw.get("photo_cleanup"):  # templates measured on real photos
+        aligned_bgr = _clean_photo(aligned_bgr, thr)
     empty_ratio = float(cfg.get("empty_ink_ratio", 0.006))
     min_ink_px = int(cfg.get("min_ink_px", 60))
     min_px = int(cfg.get("min_component_px", 12))
     rep_w = float(cfg.get("repeat_mark_max_width_ratio", 0.18))
     rep_h = float(cfg.get("repeat_mark_min_height_ratio", 0.85))
+    # where digits are as tall as the row, a ditto mark is told apart by a thin stroke running through the cell
+    rep_aspect = float(cfg.get("repeat_mark_min_aspect", 0.0))
+    rep_edges = bool(cfg.get("repeat_mark_touch_edges", False))
 
     crops: list[CropImage] = []
     for spec in fields if fields is not None else template.prioritized():
@@ -132,7 +166,8 @@ def segment(aligned_bgr: np.ndarray, template: Template, reference_path: str, cf
         ys, xs = np.nonzero(ink)
         bw, bh = xs.max() - xs.min() + 1, ys.max() - ys.min() + 1
         ch, cw = ink.shape
-        if spec.is_cell and bw <= rep_w * cw and bh >= rep_h * ch:
+        through = not rep_edges or (ys.min() <= 1 and ys.max() >= ch - 2)
+        if spec.is_cell and bw <= rep_w * cw and bh >= rep_h * ch and bh >= rep_aspect * bw and through:
             crops.append(CropImage(spec, box, None, False, round(ratio, 5), "repeat"))
             continue
         m = 8

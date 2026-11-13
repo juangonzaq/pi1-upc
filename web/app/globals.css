@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* Línea de marca Hochschild Mining: dorado, tinta cálida, plata y grises claros; esquinas rectas. */
+@theme inline {
+  --font-display: var(--font-outfit), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --color-ink: #24211f;
+  --color-ink-2: #58595b;
+  --color-ink-3: #6e6f71;
+  --color-paper: #f4f4f4;
+  --color-paper-2: #f9f9f9;
+  --color-surface: #ffffff;
+  --color-line: #d9d9d9;
+  --color-silver: #bbbcbe;
+  --color-gold: #c29a39;
+  --color-gold-ink: #8a6a1f;
+  --color-gold-tint: #f7f0df;
+
+  /* estados (validados con el skill dataviz: CVD ΔE ≥ 11, contraste ≥ 3:1); siempre con ícono y texto */
+  --color-auto: #0f8a7a;
+  --color-auto-tint: #e3f2ef;
+  --color-review: #d07a00;
+  --color-review-tint: #fbeedb;
+  --color-decided: #6250d6;
+  --color-decided-tint: #ecebfb;
+  --color-error: #b8322f;
+  --color-error-tint: #f9e5e4;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  font-feature-settings: "kern";
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recortes de campos: sobre un damero suave para que se vea el borde del recorte */
+.crop-img {
+  background: repeating-conic-gradient(#efefef 0% 25%, #fff 0% 50%) 50% / 10px 10px;
+}
+
+/* La línea del gráfico de evolución se dibuja una vez al entrar */
+.draw-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-line 900ms ease-out forwards;
+}
+
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .draw-line {
+    stroke-dashoffset: 0;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

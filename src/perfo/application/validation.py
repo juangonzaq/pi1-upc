@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -49,11 +50,13 @@ class ValidationResult:
 
 
 class ValidationService:
-    def __init__(self, repo: RepositoryPort, masters: MasterDataPort, homologator: Homologator, template: Template, telemetry: TelemetryPort):
+    def __init__(self, repo: RepositoryPort, masters: MasterDataPort, homologator: Homologator, template: Template, telemetry: TelemetryPort,
+                 template_for: Callable[[str | None], Template] | None = None):
         self.repo = repo
         self.masters = masters
         self.homologator = homologator
         self.template = template
+        self.template_for = template_for or (lambda _version: template)
         self.telemetry = telemetry
         self._warnings: list[str] = []
 
@@ -87,8 +90,8 @@ class ValidationService:
         self.repo.update_document(doc)
         self.repo.record_state_change(doc.id, prev.value, target.value, cause, actor)
 
-    def _canonical(self, fv: FieldValue, dec: Decision, shift: str | None, code_sets: dict) -> str | None:
-        spec = self.template.field(fv.field_id)
+    def _canonical(self, template: Template, fv: FieldValue, dec: Decision, shift: str | None, code_sets: dict) -> str | None:
+        spec = template.field(fv.field_id)
         if spec.type == FieldType.MASTER_REF:
             code = dec.value
             if code is None and dec.text:
@@ -107,6 +110,8 @@ class ValidationService:
             if p.value is not None and p.error in NON_BLOCKING:
                 self._warnings.append(f"{fv.field_id}: {p.error}")
                 return p.value
+            if p.error == "hora_ambigua":
+                raise ValidationBlocked(f"Indique el turno (D o N) para validar la hora {raw}, o escríbala con AM o PM.", ["header.shift", fv.field_id])
             raise ValidationBlocked(f"{fv.field_id}: '{raw}' no es válido ({p.error})", [fv.field_id])
         return p.value
 
@@ -132,7 +137,8 @@ class ValidationService:
             raise ValidationBlocked(f"{len(missing)} campos requieren acción del validador", missing)
 
         codes = self.masters.get_master("codigos").items
-        code_sets = effective_code_sets(self.template, codes)
+        template = self.template_for(doc.template_version)
+        code_sets = effective_code_sets(template, codes)
         shift_fv = next((v for v in values if v.field_id == "header.shift"), None)
         shift = decisions["header.shift"].value if "header.shift" in decisions and decisions["header.shift"].value else (shift_fv.value if shift_fv else None)
 
@@ -165,14 +171,14 @@ class ValidationService:
                 corrections.append(self._correction(doc_id, fv, final, dec.text, rec, user, "confirmed_review"))
                 continue
             if dec.action == "clear":
-                spec = self.template.field(fv.field_id)
+                spec = template.field(fv.field_id)
                 if spec.required == "always":
                     blocked.append(fv.field_id)
                     continue
                 validated.append(ValidatedValue(fv.field_id, None, "corrected", fv.id))
                 corrections.append(self._correction(doc_id, fv, None, "", rec, user, "correction"))
                 continue
-            final = self._canonical(fv, dec, shift, code_sets)
+            final = self._canonical(template, fv, dec, shift, code_sets)
             if final is None:
                 blocked.append(fv.field_id)
                 continue
@@ -180,7 +186,7 @@ class ValidationService:
             kind = "correction" if final != fv.value or (dec.text and fv.text and dec.text != fv.text) else "confirmed_review"
             validated.append(ValidatedValue(fv.field_id, final, source if kind == "correction" else "confirmed", fv.id))
             corrections.append(self._correction(doc_id, fv, final, dec.text, rec, user, kind))
-            spec = self.template.field(fv.field_id)
+            spec = template.field(fv.field_id)
             if spec.type == FieldType.MASTER_REF and fv.text and fv.homologation and (not fv.homologation.accepted or fv.homologation.code != final):
                 self.homologator.learn_alias(spec.master_type, fv.text, final, user)  # type: ignore[arg-type]
                 aliases += 1

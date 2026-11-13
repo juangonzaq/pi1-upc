@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from perfo.domain.fields import parse_template
-from perfo.synth.content import FormContent, OperatorProfile, generate_content
+from perfo.synth.content import FormContent, OperatorProfile, crew_for, generate_content
 from perfo.synth.fonts import ensure_fonts
 from perfo.synth.handwriting import HandStyle, make_style
 from perfo.synth.masters import build_masters, write_masters
@@ -22,6 +22,8 @@ HIST_START = date(2026, 4, 1)
 HIST_DAYS = 183
 OPS_START = date(2026, 10, 1)
 OPS_DAYS = 14
+EXTRA_START = OPS_START + timedelta(days=OPS_DAYS)
+EXTRA_DAYS = 60
 
 _BLANK: dict[str, Any] = {}
 
@@ -70,6 +72,23 @@ def _corrupt(value: str, ftype: str, field_id: str, rng: random.Random, masters:
     return value
 
 
+def _operator_profiles(
+    seed: int, operators: list[dict[str, Any]], new_ops: list[dict[str, Any]], reserved: list[str], regular: list[str],
+) -> tuple[dict[str, OperatorProfile], dict[str, HandStyle]]:
+    """Handwriting style and writing habits per operator (deterministic from the corpus seed)."""
+    profiles: dict[str, OperatorProfile] = {}
+    styles: dict[str, HandStyle] = {}
+    for i, op in enumerate(operators):
+        orng = random.Random(_seed(seed, "operator", op["codigo"]))
+        font_pool = reserved if op in new_ops else [regular[i % len(regular)]]
+        styles[op["codigo"]] = make_style(orng, font_pool)
+        profiles[op["codigo"]] = OperatorProfile(
+            code=op["codigo"], style_id=i, time_style=orng.choice(["24h", "24h", "12h", "12h_suffix"]),
+            decimal_comma=orng.random() < 0.3, date_style=orng.randrange(4), labor_upper=orng.random() < 0.7,
+        )
+    return profiles, styles
+
+
 def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: Path, fonts_dir: Path, seed: int) -> dict[str, Any]:
     """Generates the full synthetic corpus and returns its manifest."""
     sc = cfg
@@ -89,17 +108,7 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
     master_paths = write_masters(masters, out_dir / "masters")
     operators = [p for p in masters["personal"] if p["rol"] == "OPERADOR"]
     hist_ops, new_ops = operators[:n_ops], operators[n_ops:]
-
-    profiles: dict[str, OperatorProfile] = {}
-    styles: dict[str, HandStyle] = {}
-    for i, op in enumerate(operators):
-        orng = random.Random(_seed(seed, "operator", op["codigo"]))
-        font_pool = reserved if op in new_ops else [regular[i % len(regular)]]
-        styles[op["codigo"]] = make_style(orng, font_pool)
-        profiles[op["codigo"]] = OperatorProfile(
-            code=op["codigo"], style_id=i, time_style=orng.choice(["24h", "24h", "12h", "12h_suffix"]),
-            decimal_comma=orng.random() < 0.3, date_style=orng.randrange(4), labor_upper=orng.random() < 0.7,
-        )
+    profiles, styles = _operator_profiles(seed, operators, new_ops, reserved, regular)
 
     equipment = masters["equipos"]
     template = parse_template(template_def)
@@ -174,12 +183,7 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
     for m in forms_meta:
         c: FormContent = m.pop("content")
         res = by_id[c.form_id]
-        gt = {
-            "form_id": c.form_id, "batch": c.batch, "date": c.date, "shift": c.shift, "crew": c.crew, "equipment": c.equipment,
-            "operator": c.operator, "fields": c.fields, "extra_text": c.extra_text, "diagonal": c.diagonal,
-            "signatures": c.signatures, "flags": res["flags"], "noise": res["noise"], "bad_scan": m["bad_scan"],
-            "style": asdict(styles[c.operator]) | {"font": Path(styles[c.operator].font_path).stem},
-        }
+        gt = _gt_payload(c, res, styles[c.operator], m["bad_scan"])
         (out_dir / "gt" / f"{c.form_id}.json").write_text(json.dumps(gt, ensure_ascii=False, indent=1))
         m["gt"] = f"gt/{c.form_id}.json"
         m["image_sha256"] = res["sha256"]
@@ -247,3 +251,72 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     return manifest
+
+
+def _gt_payload(c: FormContent, render: dict[str, Any], style: HandStyle, bad: str | None) -> dict[str, Any]:
+    return {
+        "form_id": c.form_id, "batch": c.batch, "date": c.date, "shift": c.shift, "crew": c.crew, "equipment": c.equipment,
+        "operator": c.operator, "fields": c.fields, "extra_text": c.extra_text, "diagonal": c.diagonal,
+        "signatures": c.signatures, "flags": render["flags"], "noise": render["noise"], "bad_scan": bad,
+        "style": asdict(style) | {"font": Path(style.font_path).stem},
+    }
+
+
+def generate_extra_forms(out_dir: Path, template_def: dict[str, Any], fonts_dir: Path, n: int, batch: str = "demo") -> list[dict[str, Any]]:
+    """Adds `n` new forms to an existing corpus (same masters, operators and handwriting), unseen by every model.
+
+    Used by the web demo to test recognition on forms with known ground truth. Dates fall after the operational
+    window and business keys never collide with the corpus, so the forms are never protected by the frozen split.
+    """
+    man_path = out_dir / "manifest.json"
+    man = json.loads(man_path.read_text())
+    seed, sc = int(man["seed"]), man["config"]
+    fonts = ensure_fonts(fonts_dir)
+    by_stem = {Path(p).stem: p for p in fonts["handwriting"]}
+    hand = [by_stem[s] for s in man["fonts"] if s in by_stem]
+    reserved_stems = set(man["reserved_fonts_new_operators"])
+    reserved = [p for p in hand if Path(p).stem in reserved_stems]
+    regular = [p for p in hand if Path(p).stem not in reserved_stems] or hand
+
+    masters = {}
+    for k in ("labores", "equipos", "personal", "codigos"):
+        with (out_dir / man["masters"][k]).open(encoding="utf-8", newline="") as fh:
+            masters[k] = list(csv.DictReader(fh))
+    operators = [p for p in masters["personal"] if p["rol"] == "OPERADOR"]
+    n_ops = int(sc["operators"])
+    hist_ops, new_ops = operators[:n_ops], operators[n_ops:]
+    profiles, styles = _operator_profiles(seed, operators, new_ops, reserved, regular)
+
+    start = sum(1 for f in man["forms"] if f["batch"] == batch)
+    rng = random.Random(_seed(seed, "extra", batch, start))
+    used = {f["true_key"] for f in man["forms"]}
+    mix = new_ops * 3 + hist_ops
+    (out_dir / "images" / batch).mkdir(parents=True, exist_ok=True)
+    entries = []
+    for i in range(n):
+        while True:
+            d = EXTRA_START + timedelta(days=rng.randrange(EXTRA_DAYS))
+            shift = rng.choice("DN")
+            eq = rng.choice(masters["equipos"])
+            if f"{d.isoformat()}|{crew_for((d - HIST_START).days, shift)}|{eq['codigo']}" not in used:
+                break
+        op = rng.choice(mix)
+        form_id = f"{batch[0].upper()}{start + i + 1:04d}"
+        content = generate_content(form_id, batch, random.Random(_seed(seed, form_id)), d, (d - HIST_START).days, shift, eq, op,
+                                   profiles[op["codigo"]], masters, sc)
+        image_path = out_dir / "images" / batch / f"{form_id}.jpg"
+        res = _render_worker({
+            "template": template_def, "printed_font": fonts["printed"][0], "content": asdict(content), "style": asdict(styles[op["codigo"]]),
+            "seed": _seed(seed, form_id, "render"), "noise_seed": _seed(seed, form_id, "noise"), "image_path": str(image_path), "bad": None,
+        })
+        (out_dir / "gt" / f"{form_id}.json").write_text(json.dumps(_gt_payload(content, res, styles[op["codigo"]], None), ensure_ascii=False, indent=1))
+        key = f"{content.date}|{content.crew}|{content.equipment}"
+        used.add(key)
+        entries.append({"form_id": form_id, "batch": batch, "image": str(image_path.relative_to(out_dir)), "bad_scan": None, "true_key": key,
+                        "operator": content.operator, "new_operator": op in new_ops, "gt": f"gt/{form_id}.json", "image_sha256": res["sha256"],
+                        "metadata_key": key})
+    man["forms"].extend(entries)
+    tmp = man_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(man, ensure_ascii=False, indent=1))
+    tmp.replace(man_path)
+    return entries

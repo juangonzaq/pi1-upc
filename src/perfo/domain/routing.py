@@ -20,6 +20,7 @@ REASON_TEXT = {
     "required_missing": "Campo obligatorio vacío",
     "repeat_mark": "Valor inferido de un trazo de repetición",
     "parse_error": "No se pudo tipar el valor",
+    "low_resolution": "Imagen bajo la resolución recomendada",
 }
 
 
@@ -27,6 +28,8 @@ REASON_TEXT = {
 class RoutingPolicy:
     thresholds: dict[str, float | None]  # per field type; None => never auto-accept
     repeat_mark_forces_review: bool = True
+    # calibration was measured on images at the recommended resolution; below it the risk bound does not hold
+    low_resolution_forces_review: bool = True
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class RoutingInput:
     homologation_ok: bool | None = None  # None when the field is not homologated
     required_missing: bool = False
     repeat_mark: bool = False
+    low_resolution: bool = False
 
 
 def decide_route(inp: RoutingInput, policy: RoutingPolicy) -> RouteDecision:
@@ -59,6 +63,8 @@ def decide_route(inp: RoutingInput, policy: RoutingPolicy) -> RouteDecision:
         reasons.append("homologation_below_threshold")
     if inp.repeat_mark and policy.repeat_mark_forces_review:
         reasons.append("repeat_mark")
+    if inp.low_resolution and policy.low_resolution_forces_review:
+        reasons.append("low_resolution")
 
     threshold = policy.thresholds.get(inp.field_type)
     if not inp.repeat_mark:

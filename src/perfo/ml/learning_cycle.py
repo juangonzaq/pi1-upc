@@ -48,7 +48,7 @@ def protected_docs(split: dict[str, Any]) -> dict[str, str]:
 def corrections_to_examples(c: Any, split: dict[str, Any], include_positives: bool) -> tuple[list[LabeledCrop], Counter]:
     """Validated corrections -> labeled crops. Corrections from protected documents are excluded (leakage)."""
     labeler = LiteralLabeler(c.masters, c.abbreviations)
-    spec_of = {f.id: f for f in c.template.fields}
+    spec_of = c.spec_of
     prot = protected_docs(split)
     max_d = float(c.cfg["dataset"].get("literal_max_distance", 0.5))
     excluded: Counter = Counter()
@@ -88,6 +88,8 @@ def measure_latency(c: Any, version: str, doc_ids: list[str], max_docs: int = 5)
     for did in doc_ids[:max_docs]:
         doc = c.repo.get_document(did)
         t0 = time.perf_counter()
+        if doc.template_version != c.template.version:  # latency is measured on the main form
+            continue
         pre = preprocess(c.storage.get(doc.original_key), c.template, c.reference_path, c.cfg.get_path("preprocessing", {}))
         if not pre.ok:
             continue

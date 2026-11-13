@@ -54,6 +54,57 @@ def template_build(out: Path = typer.Option(Path("configs/template_v1.json"), he
     typer.echo(f"Matriz de priorización en {matrix}")
 
 
+@template_app.command("import-hu06")
+def template_import_hu06(
+    hu06_json: Path = typer.Argument(..., exists=True, help="plantilla_v1_reporte-perforacion-tl.json de HU06"),
+    reference_image: Path = typer.Option(..., "--reference-image", exists=True, help="Página plana de referencia (referencia_plana.png)"),
+    out: Path = typer.Option(Path("configs/template_v2.json"), help="Plantilla de salida"),
+    codes_out: Path = typer.Option(Path("configs/masters_fisico/codigos.csv"), help="Maestro de códigos tomado de la leyenda del formato"),
+) -> None:
+    """Convierte la plantilla del formato físico medida en HU06 (página plana) a una plantilla de perfo."""
+    import cv2  # noqa: PLC0415
+
+    from perfo.adapters.hu06.template import convert, frame_anchors, legend_rows  # noqa: PLC0415
+    from perfo.domain.fields import parse_template  # noqa: PLC0415
+
+    ref_out = out.with_name(out.stem + "_reference.png")
+    gray = cv2.imread(str(reference_image), cv2.IMREAD_GRAYSCALE)
+    if gray is None:
+        raise typer.BadParameter(f"No se pudo leer la imagen de referencia {reference_image}")
+    definition = convert(json.loads(hu06_json.read_text(encoding="utf-8")), str(ref_out), anchors_px=frame_anchors(gray))
+    if gray.shape[::-1] != (definition["reference"]["width"], definition["reference"]["height"]):
+        raise typer.BadParameter(f"La imagen mide {gray.shape[1]}×{gray.shape[0]} px y la plantilla declara "
+                                 f"{definition['reference']['width']}×{definition['reference']['height']}")
+    cv2.imwrite(str(ref_out), gray)
+    out.write_text(json.dumps(definition, indent=1, ensure_ascii=False))
+    codes_out.parent.mkdir(parents=True, exist_ok=True)
+    with codes_out.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=["tipo", "codigo", "descripcion"])
+        w.writeheader()
+        w.writerows(legend_rows())
+    t = parse_template(definition)
+    by_type = Counter(f.type.value for f in t.prioritized())
+    typer.echo(f"Plantilla {t.template_id} v{t.version} en {out} (referencia {ref_out}, {t.width}×{t.height} px)")
+    typer.echo(f"  Conceptos priorizados: {len(t.field_keys())}; instancias (celdas incluidas): {len(t.prioritized())}; "
+               + ", ".join(f"{k} {v}" for k, v in sorted(by_type.items())))
+    typer.echo(f"  Anclas de alineación (esquinas de los marcos impresos): {len(definition['anchors'])}")
+    typer.echo(f"Maestro de códigos de la leyenda en {codes_out}")
+
+
+@template_app.command("from-photos")
+def template_from_photos(
+    photos: Path = typer.Argument(..., exists=True, file_okay=False, help="Carpeta con las fotos reales (Formatos_fisicos)"),
+    base: Path = typer.Option(Path("configs/template_v2.json"), exists=True, help="Plantilla que aporta los conjuntos de códigos"),
+    out: Path = typer.Option(Path("configs/templates_real"), help="Carpeta de las definiciones"),
+    images: Path = typer.Option(Path("data/plantillas_reales"), help="Carpeta de las referencias planas; vienen de fotos reales y quedan fuera de git"),
+) -> None:
+    """Construye las plantillas de los formatos reales (taladros largos y Jackleg) a partir de sus fotos."""
+    from perfo.adapters.hu06.real_forms import build  # noqa: PLC0415
+
+    for path in build(photos, json.loads(base.read_text(encoding="utf-8")), out, images, str(images)):
+        typer.echo(f"Escrito {path}")
+
+
 @template_app.command("show")
 def template_show(profile: str | None = ProfileOpt) -> None:
     """Muestra un resumen de la plantilla vigente."""
@@ -202,7 +253,7 @@ def ingest(
 def process(
     doc_id: str | None = typer.Argument(None, help="Documento a procesar (por defecto, todos los que están en cola)"),
     until: str | None = typer.Option(None, help="Detenerse tras una etapa (segment)"),
-    model: str | None = typer.Option(None, "--model", help="Versión de modelo (por defecto, la activa)"),
+    model: str | None = typer.Option(None, "--model", help="Versión de modelo (por defecto, la activa; latest = el último modelo ajustado registrado)"),
     profile: str | None = ProfileOpt,
     workspace: str | None = WorkspaceOpt,
 ) -> None:
@@ -210,6 +261,10 @@ def process(
     c = container(profile, workspace)
     if until is None:
         c.ensure_baseline()
+    if model == "latest":
+        trained = [i for i in c.registry.list() if not i.version.startswith("baseline-")]
+        model = max(trained, key=lambda i: i.created_at).version if trained else None
+        typer.echo(f"Modelo: {model or 'activo'} ({'último ajustado registrado' if model else 'no hay modelos ajustados'})")
     proc = c.processor(version=model)
     ids = [doc_id] if doc_id else [d.id for d in c.repo.list_documents(states=["EN_COLA"])]
     for i, did in enumerate(ids, 1):
@@ -262,6 +317,83 @@ def _find_doc(c: Container, prefix: str):  # noqa: ANN202
 
 evaluate_app = typer.Typer(help="Evaluación de modelos", no_args_is_help=True)
 app.add_typer(evaluate_app, name="evaluate")
+truth_app = typer.Typer(help="Verdad de referencia (doble digitación o anotaciones)", no_args_is_help=True)
+app.add_typer(truth_app, name="truth")
+
+
+@truth_app.command("import-boxes")
+def truth_import_boxes(
+    truth_dir: Path = typer.Argument(..., exists=True, file_okay=False, help="Carpeta con un JSON por formato: [{caja, texto, tachado}]"),
+    images: Path = typer.Option(..., "--images", exists=True, file_okay=False, help="Carpeta de las imágenes (da el nombre de archivo de cada JSON)"),
+    out: Path = typer.Option(..., "--out", help="CSV de referencia: archivo, campo, valor, texto, operador"),
+    min_overlap: float = typer.Option(0.5, help="Fracción mínima de la caja del texto dentro del campo"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Convierte anotaciones por cajas sobre la página plana (verdad de HU06) en el CSV de referencia por campo."""
+    from perfo.adapters.hu06.truth import boxes_to_reference  # noqa: PLC0415
+    from perfo.application.structuring import effective_code_sets  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    files = {p.stem: p.name for p in images.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png")}
+    try:
+        codes = c.masters.get_master("codigos").items
+    except Exception:  # noqa: BLE001 (codes master not imported yet: the template values are used)
+        codes = None
+    rows, stats = boxes_to_reference(c.template, truth_dir, files, effective_code_sets(c.template, codes), min_overlap)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=["archivo", "campo", "valor", "texto", "operador"])
+        w.writeheader()
+        w.writerows(rows)
+    typer.echo(f"Referencia en {out}: {len(rows)} campos de {stats.get('formatos', 0)} formatos")
+    typer.echo("  " + ", ".join(f"{k}={v}" for k, v in stats.items() if k != "sin_imagen"))
+    if stats.get("sin_imagen"):
+        typer.secho(f"  Sin imagen para: {', '.join(stats['sin_imagen'][:10])}", fg="yellow")
+
+
+@evaluate_app.command("reference")
+def evaluate_reference_cmd(
+    versions: list[str] = typer.Argument(None, help="Versiones a comparar (por defecto: línea base y las dos últimas registradas)"),
+    reference: Path = typer.Option(..., "--reference", exists=True, help="CSV de referencia (archivo, campo, valor, texto)"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Evalúa modelos sobre todos los documentos procesados que tienen verdad de referencia (sin partición congelada)."""
+    from perfo.ml.pipeline import baseline_version, evaluate_models  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    gt = _gt(c, reference)
+    docs = c.repo.list_documents()
+    states = Counter(d.state.value for d in docs)
+    with_truth = [d.id for d in docs if c.repo.get_crops(d.id) and gt.fields(d.metadata.get("form_id") or d.source_name)]
+    typer.echo(f"Documentos: {len(docs)} ({', '.join(f'{k} {v}' for k, v in sorted(states.items()))}); segmentados con verdad: {len(with_truth)}")
+    for d in docs:
+        if d.state.value in ("ERROR", "EN_REVISION") and not c.repo.get_crops(d.id):
+            typer.echo(f"  {d.source_name}: {d.state.value} · {d.state_cause}")
+    if not with_truth:
+        raise typer.BadParameter("No hay documentos segmentados cuyo nombre de archivo figure en la referencia")
+    if not versions:  # line base against the most recent registered versions
+        base = baseline_version(c)
+        versions = [base] + [i.version for i in c.registry.list() if i.version != base and c.has_weights(i.version)][-2:]
+    res = evaluate_models(c, versions, {"test": with_truth}, gt, log=lambda *_: None)
+    for v in versions:
+        m = res["models"][v]
+        typer.secho(f"{v}: CER {m['cer']:.4f} · WER {m['wer']:.4f} · exactitud literal {m['exact']:.3f} · "
+                    f"exactitud por campo {m['field_accuracy']:.3f} (n={m['n']})", fg="cyan")
+        for t, s in m["by_type"].items():
+            fa = m["field_accuracy_by_type"].get(t, {})
+            typer.echo(f"    {t:<11} CER {s['cer']:.4f}  exactos {s['exact']:.3f}  valor {fa.get('accuracy', float('nan')):.3f}  n={s['n']}")
+    if "relative_cer_reduction_pct" in res:
+        typer.secho(f"Reducción relativa de CER ({versions[0]} → {versions[1]}): {res['relative_cer_reduction_pct']:.1f} %", fg="cyan")
+    out = c.workspace / "reports"
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"evaluacion_referencia_{Path(reference).stem}.json"
+    if path.exists():  # a version not evaluated this time keeps its measurement: it is the history of the model
+        res["models"] = {**json.loads(path.read_text()).get("models", {}), **res["models"]}
+    path.write_text(json.dumps({"reference": str(reference), "documents": len(with_truth), "states": dict(states), **res},
+                               indent=1, ensure_ascii=False, default=str))
+    typer.echo(f"Detalle por campo en {path}")
 
 
 def _print_text_summary(title: str, s: dict) -> None:
@@ -632,6 +764,51 @@ def promote_cmd(
         raise typer.Exit(1)
 
 
+@registry_app.command("import")
+def registry_import(
+    version: str | None = typer.Argument(None, help="Versión a importar (por defecto, la activa del origen)"),
+    from_workspace: Path | None = typer.Option(None, "--from-workspace", exists=True, file_okay=False,
+                                               help="Espacio de trabajo de origen (por defecto, la última corrida e2e smoke)"),
+    profile: str | None = ProfileOpt,
+    workspace: str | None = WorkspaceOpt,
+) -> None:
+    """Copia el artefacto de un modelo de otro espacio de trabajo como candidato, sin su calibración.
+
+    La calibración depende de los datos donde se midió; en un formato distinto se vuelve a calibrar.
+    """
+    from perfo.adapters.registry_disk.registry import DiskModelRegistry  # noqa: PLC0415
+
+    c = container(profile, workspace)
+    if from_workspace is None:
+        latest = _latest_e2e_workspace("smoke")
+        if latest is None:
+            raise typer.BadParameter("No hay corridas e2e smoke; indique --from-workspace")
+        from_workspace = Path(latest)
+    source = DiskModelRegistry(from_workspace / "registry")
+    if version is None:
+        active = source.get_active()
+        if active is None:
+            raise typer.BadParameter(f"{from_workspace} no tiene modelo activo; indique la versión")
+        version = active.version
+    try:
+        c.registry.get(version)
+        typer.echo(f"{version} ya está registrado en {c.workspace}; no se copia otra vez")
+        return
+    except KeyError:
+        pass
+    src = source.get(version)
+    if not Path(src.artifact_uri).is_dir():
+        raise typer.BadParameter(f"El artefacto de {version} no es una carpeta local ({src.artifact_uri})")
+    info = c.registry.publish(version, src.artifact_uri, {
+        "base_checkpoint": src.base_checkpoint, "parent": src.parent, "status": "candidate", "imported_from": str(from_workspace),
+        "source_sha256": src.artifact_sha256, "seed": src.metadata.get("seed"), "dataset_snapshot": src.metadata.get("dataset_snapshot"),
+        "description": "Importado de otro espacio de trabajo sin calibración (todos sus campos van a revisión hasta recalibrar)",
+    })
+    c.repo.upsert_model_version(info.__dict__)
+    same = "igual" if info.artifact_sha256 == src.artifact_sha256 else "DISTINTO"
+    typer.secho(f"Importado {version} (sha256 {info.artifact_sha256[:12]}…, {same} al de origen)", fg="green")
+
+
 @registry_app.command("list")
 def registry_list(profile: str | None = ProfileOpt, workspace: str | None = WorkspaceOpt) -> None:
     """Versiones de modelo con su estado, padre, calibración y compuertas."""
@@ -657,6 +834,37 @@ def e2e_cmd(
 
     R = run_e2e(profile, device=device, workspace=workspace, log=typer.echo)
     typer.secho(f"Reporte: {R['report_paths']['markdown']}", fg="green")
+
+
+def _latest_e2e_workspace(profile: str) -> str | None:
+    """Most recent `perfo e2e` run of the profile (data/e2e/<perfil>/<fecha_hora>), or None to use the profile workspace."""
+    cfg = load_config(profile)
+    base = cfg.resolve(cfg["workspace"])
+    if (base / "perfo.sqlite").exists() or not base.is_dir():
+        return None
+    runs = sorted(p for p in base.iterdir() if (p / "perfo.sqlite").exists() and (p / "registry" / "registry.json").exists())
+    return str(runs[-1]) if runs else None
+
+
+@app.command("serve")
+def serve_cmd(
+    host: str = typer.Option("127.0.0.1", help="Interfaz de red de la API"),
+    port: int = typer.Option(8000, help="Puerto de la API"),
+    profile: str = typer.Option("smoke", "--profile", "-p", help="smoke | full"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w", help="Carpeta de trabajo (por defecto, la última corrida e2e del perfil)"),
+    reference: Path | None = ReferenceOpt,
+    origins: list[str] = typer.Option(None, "--origin", help="Origen adicional permitido por CORS (además de localhost:3100 y :3000)"),
+) -> None:
+    """API HTTP para la interfaz web: ingesta, reconocimiento, revisión manual, reentrenamiento y promoción."""
+    from perfo.adapters.http.api import DEFAULT_ORIGINS, serve  # noqa: PLC0415
+
+    ws = workspace or _latest_e2e_workspace(profile)
+    c = container(profile, ws)
+    active = c.registry.get_active()
+    typer.echo(f"Espacio de trabajo: {c.workspace}")
+    typer.echo(f"Modelo activo: {active.version if active else '(ninguno; se usará la línea base)'} · dispositivo {c.device()}")
+    typer.echo(f"API en http://{host}:{port}/api (documentación interactiva en http://{host}:{port}/docs)")
+    serve(c, host, port, str(reference) if reference else None, [*DEFAULT_ORIGINS, *(origins or [])])
 
 
 @app.command("status")

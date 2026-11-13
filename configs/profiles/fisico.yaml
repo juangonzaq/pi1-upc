@@ -1,0 +1,23 @@
+# Perfil del formato físico de taladros largos (diseño medido en HU06) para las fotos del repositorio del proyecto.
+# Las fotos se toman sobre una mesa: la hoja ocupa solo parte del encuadre y llega con perspectiva.
+workspace: data/fisico
+template: configs/template_v2.json
+# formatos reales: se prueban solo si la plantilla principal no reconoce la imagen (`make fisico-templates`)
+extra_templates:
+  - configs/templates_real/real_tl.json
+  - configs/templates_real/jackleg.json
+model:
+  base_checkpoint: microsoft/trocr-small-handwritten
+preprocessing:
+  min_scale_det: 0.3
+  max_scale_det: 14.0      # escala de área foto → página plana (un escaneo da ~1; una foto de 1280 px que llena el encuadre, ~10)
+  work_scale: 0.5          # más resolución para ORB: la hoja es más pequeña en la foto
+  refine_search_px: [90, 40, 0]   # refinamiento por anclas: búsqueda amplia, media y fina (0 = ventana de la tolerancia)
+  local_warp: true         # corrige la curvatura de la hoja con un campo de desplazamientos entre las anclas
+segmentation:
+  # filas de 25 px en la página plana (la mitad que en v1): margen y puntos decimales a esa escala
+  inset_px: 3
+  min_component_px: 4      # con 12 se borraba el punto decimal
+  # aquí un dígito ocupa toda la altura de la fila: la marca de repetición es un trazo delgado que atraviesa la celda
+  repeat_mark_min_aspect: 3.0
+  repeat_mark_touch_edges: true

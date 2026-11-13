@@ -1,0 +1,686 @@
+{
+ "template_id": "reporte-perforacion-tl-real",
+ "version": "real-tl-1.0",
+ "valid_from": "2026-10-30",
+ "description": "Formato real de taladros largos, medido sobre la foto ejemplo_03 aplanada (sin escaneo en blanco disponible)",
+ "fields": [
+  {
+   "id": "header.date",
+   "block": "header",
+   "label": "Fecha",
+   "type": "date",
+   "box": [
+    0.088255,
+    0.136824,
+    0.20261,
+    0.15991
+   ],
+   "priority": true,
+   "required": "always"
+  },
+  {
+   "id": "header.shift",
+   "block": "header",
+   "label": "Turno",
+   "type": "code",
+   "box": [
+    0.088255,
+    0.15991,
+    0.20261,
+    0.176802
+   ],
+   "priority": true,
+   "required": "always",
+   "code_set": "shift"
+  },
+  {
+   "id": "header.crew",
+   "block": "header",
+   "label": "Guardia",
+   "type": "code",
+   "box": [
+    0.767514,
+    0.046171,
+    0.823146,
+    0.078829
+   ],
+   "priority": true,
+   "required": "always"
+  },
+  {
+   "id": "header.equipment",
+   "block": "header",
+   "label": "Código del equipo",
+   "type": "code",
+   "box": [
+    0.671703,
+    0.008446,
+    0.732486,
+    0.033784
+   ],
+   "priority": true,
+   "required": "always"
+  },
+  {
+   "id": "header.operator",
+   "block": "header",
+   "label": "Operador de equipo",
+   "type": "free_text",
+   "box": [
+    0.669643,
+    0.072072,
+    0.807005,
+    0.109797
+   ],
+   "priority": true,
+   "required": "always"
+  },
+  {
+   "id": "header.engine_hm_start",
+   "block": "header",
+   "label": "Horómetro de motor inicial",
+   "type": "numeric",
+   "box": [
+    0.421703,
+    0.147523,
+    0.46875,
+    0.163288
+   ],
+   "priority": true,
+   "required": "no",
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.engine_hm_end",
+   "block": "header",
+   "label": "Horómetro de motor final",
+   "type": "numeric",
+   "box": [
+    0.421703,
+    0.163288,
+    0.46875,
+    0.179617
+   ],
+   "priority": true,
+   "required": "no",
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.percussion_hm_start",
+   "block": "header",
+   "label": "Horómetro de percusión inicial",
+   "type": "numeric",
+   "box": [
+    0.46875,
+    0.147523,
+    0.563187,
+    0.163288
+   ],
+   "priority": true,
+   "required": "no",
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.percussion_hm_end",
+   "block": "header",
+   "label": "Horómetro de percusión final",
+   "type": "numeric",
+   "box": [
+    0.46875,
+    0.163288,
+    0.563187,
+    0.179617
+   ],
+   "priority": true,
+   "required": "no",
+   "subtype": "decimal"
+  },
+  {
+   "id": "header.initial_state",
+   "block": "header",
+   "label": "Estado inicial del equipo",
+   "type": "free_text",
+   "box": [
+    0.683379,
+    0.042793,
+    0.740041,
+    0.064752
+   ],
+   "priority": true,
+   "required": "no"
+  },
+  {
+   "id": "closing.location",
+   "block": "closing",
+   "label": "Ubicación del equipo",
+   "type": "free_text",
+   "box": [
+    0.151442,
+    0.744932,
+    0.272665,
+    0.765766
+   ],
+   "priority": true,
+   "required": "no"
+  },
+  {
+   "id": "closing.final_state",
+   "block": "closing",
+   "label": "Estado final del equipo",
+   "type": "free_text",
+   "box": [
+    0.371223,
+    0.748874,
+    0.424107,
+    0.768581
+   ],
+   "priority": true,
+   "required": "no"
+  },
+  {
+   "id": "closing.gallons",
+   "block": "closing",
+   "label": "N.° de galones",
+   "type": "numeric",
+   "box": [
+    0.45467,
+    0.748874,
+    0.59581,
+    0.768581
+   ],
+   "priority": true,
+   "required": "no",
+   "subtype": "decimal"
+  }
+ ],
+ "tables": [
+  {
+   "id": "activities",
+   "block": "activities",
+   "title": "Actividades",
+   "rows": 22,
+   "box": [
+    0.089286,
+    0.225225,
+    0.793269,
+    0.527601
+   ],
+   "header_height": 0.0,
+   "row_height": 0.013744,
+   "columns": [
+    {
+     "id": "code",
+     "label": "Código de actividad",
+     "type": "code",
+     "code_set": "activity_codes",
+     "x0": 0.089286,
+     "x1": 0.136676,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "start",
+     "label": "Hora inicial",
+     "type": "time",
+     "x0": 0.136676,
+     "x1": 0.18647,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "end",
+     "label": "Hora final",
+     "type": "time",
+     "x0": 0.18647,
+     "x1": 0.223901,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "holes",
+     "label": "N.° de taladros",
+     "type": "numeric",
+     "subtype": "integer",
+     "min": 0,
+     "max": 99,
+     "x0": 0.42136,
+     "x1": 0.457074,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "bars",
+     "label": "N.° de barras usadas",
+     "type": "numeric",
+     "subtype": "integer",
+     "min": 0,
+     "max": 99,
+     "x0": 0.457074,
+     "x1": 0.486264,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "length_m",
+     "label": "Longitud del taladro (m)",
+     "type": "numeric",
+     "subtype": "decimal",
+     "min": 0,
+     "max": 60,
+     "x0": 0.486264,
+     "x1": 0.520604,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "deviation_m",
+     "label": "Desviación (m)",
+     "type": "numeric",
+     "subtype": "decimal",
+     "x0": 0.580014,
+     "x1": 0.633242,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "deviation_pct",
+     "label": "Desviación (%)",
+     "type": "numeric",
+     "subtype": "decimal",
+     "x0": 0.633242,
+     "x1": 0.675824,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "notes",
+     "label": "Observaciones",
+     "type": "free_text",
+     "x0": 0.675824,
+     "x1": 0.793269,
+     "priority": true,
+     "required": "no"
+    }
+   ]
+  },
+  {
+   "id": "delays",
+   "block": "delays",
+   "title": "Demoras operativas",
+   "rows": 8,
+   "box": [
+    0.056319,
+    0.57714,
+    0.420673,
+    0.688851
+   ],
+   "header_height": 0.0,
+   "row_height": 0.013964,
+   "columns": [
+    {
+     "id": "labor",
+     "label": "Labor",
+     "type": "free_text",
+     "x0": 0.056319,
+     "x1": 0.120192,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "code",
+     "label": "Código de demora",
+     "type": "code",
+     "code_set": "delay_codes",
+     "x0": 0.120192,
+     "x1": 0.15831,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "start",
+     "label": "Hora inicial",
+     "type": "time",
+     "x0": 0.15831,
+     "x1": 0.199519,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "end",
+     "label": "Hora final",
+     "type": "time",
+     "x0": 0.199519,
+     "x1": 0.244505,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "notes",
+     "label": "Observación",
+     "type": "free_text",
+     "x0": 0.244505,
+     "x1": 0.420673,
+     "priority": true,
+     "required": "no"
+    }
+   ]
+  },
+  {
+   "id": "failures",
+   "block": "failures",
+   "title": "Paradas por fallas",
+   "rows": 8,
+   "box": [
+    0.420673,
+    0.577703,
+    0.748626,
+    0.691216
+   ],
+   "header_height": 0.0,
+   "row_height": 0.014189,
+   "columns": [
+    {
+     "id": "labor",
+     "label": "Labor",
+     "type": "free_text",
+     "x0": 0.420673,
+     "x1": 0.463942,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "code",
+     "label": "Código de falla",
+     "type": "code",
+     "code_set": "failure_codes",
+     "x0": 0.463942,
+     "x1": 0.511676,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "start",
+     "label": "Hora inicial",
+     "type": "time",
+     "x0": 0.511676,
+     "x1": 0.562157,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "end",
+     "label": "Hora final",
+     "type": "time",
+     "x0": 0.562157,
+     "x1": 0.633242,
+     "required": "if_row",
+     "priority": true
+    },
+    {
+     "id": "total_hours",
+     "label": "Horas totales",
+     "type": "numeric",
+     "subtype": "decimal",
+     "x0": 0.633242,
+     "x1": 0.675824,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "notes",
+     "label": "Observación",
+     "type": "free_text",
+     "x0": 0.675824,
+     "x1": 0.748626,
+     "priority": true,
+     "required": "no"
+    }
+   ]
+  },
+  {
+   "id": "steel",
+   "block": "steel",
+   "title": "Control de aceros",
+   "rows": 3,
+   "box": [
+    0.633929,
+    0.735923,
+    0.810096,
+    0.785755
+   ],
+   "header_height": 0.0,
+   "row_height": 0.01661,
+   "columns": [
+    {
+     "id": "bits",
+     "label": "N.° de brocas",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.633929,
+     "x1": 0.676854,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "rods",
+     "label": "N.° de barras",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.676854,
+     "x1": 0.712912,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "tube",
+     "label": "Tubo Tac",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.712912,
+     "x1": 0.749313,
+     "priority": true,
+     "required": "no"
+    },
+    {
+     "id": "shank",
+     "label": "Shank",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.749313,
+     "x1": 0.810096,
+     "priority": true,
+     "required": "no"
+    }
+   ]
+  }
+ ],
+ "signatures": [
+  {
+   "id": "signatures.operator",
+   "label": "Operador de equipo",
+   "box": [
+    0.052885,
+    0.765203,
+    0.161401,
+    0.815878
+   ]
+  },
+  {
+   "id": "signatures.shift_boss",
+   "label": "Jefe de guardia de mina",
+   "box": [
+    0.243475,
+    0.773649,
+    0.343407,
+    0.824324
+   ]
+  },
+  {
+   "id": "signatures.maintenance",
+   "label": "Responsable de mantenimiento",
+   "box": [
+    0.421703,
+    0.773649,
+    0.520261,
+    0.824324
+   ]
+  },
+  {
+   "id": "signatures.drilling_blasting",
+   "label": "Perforación y voladura",
+   "box": [
+    0.651442,
+    0.783784,
+    0.808036,
+    0.834459
+   ]
+  }
+ ],
+ "reference": {
+  "width": 2912,
+  "height": 1776,
+  "dpi": 250
+ },
+ "reference_image": "data/plantillas_reales/real_tl.png",
+ "alignment": {
+  "tolerance_px": 14,
+  "min_inliers": 25,
+  "max_reproj_error_px": 4.0,
+  "min_dpi": 200,
+  "min_sharpness": 15.0,
+  "max_outlier_ratio": 0.34
+ },
+ "photo_cleanup": true,
+ "anchors": [
+  [
+   0.089286,
+   0.225225
+  ],
+  [
+   0.793269,
+   0.225225
+  ],
+  [
+   0.089286,
+   0.527601
+  ],
+  [
+   0.793269,
+   0.527601
+  ],
+  [
+   0.056319,
+   0.57714
+  ],
+  [
+   0.420673,
+   0.57714
+  ],
+  [
+   0.056319,
+   0.688851
+  ],
+  [
+   0.420673,
+   0.688851
+  ],
+  [
+   0.420673,
+   0.577703
+  ],
+  [
+   0.748626,
+   0.577703
+  ],
+  [
+   0.420673,
+   0.691216
+  ],
+  [
+   0.748626,
+   0.691216
+  ],
+  [
+   0.633929,
+   0.735923
+  ],
+  [
+   0.810096,
+   0.735923
+  ],
+  [
+   0.633929,
+   0.785755
+  ],
+  [
+   0.810096,
+   0.785755
+  ]
+ ],
+ "code_sets": {
+  "shift": {
+   "values": [
+    "D",
+    "N",
+    "C"
+   ],
+   "synonyms": {
+    "DIA": "D",
+    "NOCHE": "N",
+    "C/GUARDIA": "C",
+    "CGUARDIA": "C"
+   }
+  },
+  "activity_codes": {
+   "master": "codigos",
+   "kind": "actividad",
+   "values": [
+    "101",
+    "102",
+    "103",
+    "104",
+    "105",
+    "106",
+    "107"
+   ]
+  },
+  "delay_codes": {
+   "master": "codigos",
+   "kind": "demora",
+   "values": [
+    "201",
+    "202",
+    "203",
+    "204",
+    "205",
+    "206",
+    "207",
+    "208",
+    "209",
+    "210",
+    "211",
+    "212",
+    "213",
+    "214",
+    "215",
+    "216",
+    "217"
+   ]
+  },
+  "failure_codes": {
+   "master": "codigos",
+   "kind": "falla",
+   "values": [
+    "301",
+    "302",
+    "303",
+    "304",
+    "305",
+    "306"
+   ]
+  }
+ },
+ "source": {
+  "photo": "Formato_fisico_ejemplo_03.jpeg"
+ }
+}

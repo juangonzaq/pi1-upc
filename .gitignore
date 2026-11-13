@@ -9,3 +9,22 @@ reports/*
 !reports/.gitkeep
 .DS_Store
 docs/*.docx
+
+# secretos
+.env
+.env.*
+!.env.example
+
+# modelos y bases fuera de data/
+*.safetensors
+*.pt
+*.ckpt
+*.sqlite
+*.sqlite-journal
+*.db
+
+# cachés de herramientas
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.log

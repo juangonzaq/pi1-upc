@@ -55,6 +55,7 @@ class AlignmentSpec:
     max_reproj_error_px: float = 4.0
     min_dpi: float = 200.0
     min_sharpness: float = 15.0
+    max_outlier_ratio: float = 0.0  # share of anchors allowed to miss (occluded or out of frame in a photo)
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,7 @@ def parse_template(data: dict[str, Any]) -> Template:
         max_reproj_error_px=float(al.get("max_reproj_error_px", 4.0)),
         min_dpi=float(al.get("min_dpi", 200.0)),
         min_sharpness=float(al.get("min_sharpness", 15.0)),
+        max_outlier_ratio=float(al.get("max_outlier_ratio", 0.0)),
     )
     return Template(
         template_id=data["template_id"],

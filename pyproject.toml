@@ -32,6 +32,7 @@ dev = ["pytest>=8.3", "pytest-cov>=5.0"]
 datasets = ["datasets>=2.20"]
 lora = ["peft>=0.12"]
 mlflow = ["mlflow>=2.15"]
+web = ["fastapi>=0.115", "uvicorn>=0.30", "python-multipart>=0.0.9"]
 
 [project.scripts]
 perfo = "perfo.cli:main"

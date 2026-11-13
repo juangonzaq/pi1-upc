@@ -80,6 +80,30 @@ class Container:
         self.repo.save_template(definition["template_id"], str(definition["version"]), definition, sha)
         return parse_template(definition)
 
+    @cached_property
+    def alternative_templates(self) -> list[tuple[Template, str]]:
+        """Other printed forms of the profile, tried when the main template does not recognize the image."""
+        found = []
+        for path in self.cfg.get_path("extra_templates", []) or []:
+            definition = json.loads(self.cfg.resolve(path).read_text())
+            reference = self.cfg.resolve(definition["reference_image"])
+            if not reference.exists():  # built from real photos, out of git: `make fisico-templates`
+                continue
+            sha = hashlib.sha256(json.dumps(definition, sort_keys=True).encode()).hexdigest()
+            self.repo.save_template(definition["template_id"], str(definition["version"]), definition, sha)
+            found.append((parse_template(definition), str(reference)))
+        return found
+
+    def template_for(self, version: str | None) -> Template:
+        """The template a document was read with."""
+        return next((t for t, _ in self.alternative_templates if t.version == version), self.template)
+
+    @cached_property
+    def spec_of(self) -> dict[str, Any]:
+        """Every field id of every template; an id shared with the main template keeps its definition."""
+        specs = {f.id: f for t, _ in reversed(self.alternative_templates) for f in t.fields}
+        return {**specs, **{f.id: f for f in self.template.fields}}
+
     # ---------------------------------------------------------------- application services
     @cached_property
     def ingestion(self):  # noqa: ANN201
@@ -107,7 +131,7 @@ class Container:
     def validation(self):  # noqa: ANN201
         from perfo.application.validation import ValidationService  # noqa: PLC0415
 
-        return ValidationService(self.repo, self.masters, self.homologator, self.template, self.telemetry)
+        return ValidationService(self.repo, self.masters, self.homologator, self.template, self.telemetry, self.template_for)
 
     def ensure_baseline(self):  # noqa: ANN201
         """Registers the pretrained checkpoint as baseline and activates it when the registry is empty."""
@@ -133,7 +157,13 @@ class Container:
 
         prof = self.calibration_profile(version) or {}
         return RoutingPolicy(thresholds=dict(prof.get("thresholds", {})),
-                             repeat_mark_forces_review=bool(self.cfg.get_path("routing.repeat_mark_forces_review", True)))
+                             repeat_mark_forces_review=bool(self.cfg.get_path("routing.repeat_mark_forces_review", True)),
+                             low_resolution_forces_review=bool(self.cfg.get_path("routing.low_resolution_forces_review", True)))
+
+    def has_weights(self, version: str) -> bool:
+        """A registered version can be read with only while its weights exist (the base model comes from its checkpoint id)."""
+        artifact = Path(self.registry.get(version).artifact_uri or "")
+        return not artifact.is_dir() or any(artifact.glob("*.safetensors"))
 
     def recognizer(self, version: str | None = None, calibrated: bool = True):  # noqa: ANN201
         from perfo.adapters.trocr.recognizer import TrocrRecognizer  # noqa: PLC0415
@@ -155,7 +185,7 @@ class Container:
         return DocumentProcessor(
             self.repo, self.storage, self.telemetry, self.template, self.reference_path, self.cfg,
             (lambda: rec) if rec is not None else (lambda: self.recognizer(version)),
-            self.homologator, self.masters, lambda: self.routing_policy(version), actor,
+            self.homologator, self.masters, lambda: self.routing_policy(version), actor, self.alternative_templates,
         )
 
     @cached_property

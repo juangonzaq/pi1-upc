@@ -42,7 +42,7 @@ class CropItem:
 
 def crop_items(c: Any, doc_ids: list[str], gt: GroundTruth | None) -> list[CropItem]:
     """All segmented field crops of the given documents (non-empty and marks), with GT labels when available."""
-    spec_of = {f.id: f for f in c.template.fields}
+    spec_of = c.spec_of
     out: list[CropItem] = []
     for did in doc_ids:
         doc = c.repo.get_document(did)
@@ -108,6 +108,13 @@ def predicted_value(template: Template, spec_id: str, text: str, shift: str | No
     return p.value
 
 
+def same_value(field_type: str, predicted: str | None, reference: str | None) -> bool:
+    """Free text is compared as literal text (case and spacing are not evaluated); typed values exactly."""
+    if field_type == FieldType.FREE_TEXT.value:
+        return literal(predicted) == literal(reference)
+    return predicted == reference
+
+
 def field_accuracy(c: Any, items: list[CropItem], texts: list[str | None], gt: GroundTruth) -> dict[str, Any]:
     """Value-level accuracy of the recognizer per field type (true shift context; homologation for master_ref)."""
     codes = c.masters.get_master("codigos").items
@@ -118,7 +125,7 @@ def field_accuracy(c: Any, items: list[CropItem], texts: list[str | None], gt: G
             continue
         shift = gt.value(it.form_id, "header.shift")
         pv = predicted_value(c.template, it.field_id, t, shift, code_sets, c.homologator)
-        by_type[it.field_type].append(pv == it.ref_value)
+        by_type[it.field_type].append(same_value(it.field_type, pv, it.ref_value))
     allv = [x for v in by_type.values() for x in v]
     return {"field_accuracy": float(np.mean(allv)) if allv else float("nan"), "n": len(allv),
             "by_type": {k: {"accuracy": float(np.mean(v)), "n": len(v)} for k, v in sorted(by_type.items())}}
@@ -152,7 +159,7 @@ def homologation_eval(homologator: Homologator, cases: list[tuple[str, str, str]
 
 def homologation_cases(c: Any, items: list[CropItem], texts: list[str | None] | None = None) -> list[tuple[str, str, str]]:
     """Homologation cases from master_ref crops: literal GT text (texts=None) or recognized text."""
-    spec_of = {f.id: f for f in c.template.fields}
+    spec_of = c.spec_of
     cases = []
     for i, it in enumerate(items):
         spec = spec_of[it.field_id]
@@ -194,7 +201,7 @@ def route_items(
     codes = c.masters.get_master("codigos").items
     code_sets = effective_code_sets(c.template, codes)
     rule_cfg = RuleConfig(**(c.cfg.get_path("rules", {}) or {}))
-    spec_of = {f.id: f for f in c.template.fields}
+    spec_of = c.spec_of
     by_doc: dict[str, list[int]] = defaultdict(list)
     for i, it in enumerate(items):
         by_doc[it.doc_id].append(i)

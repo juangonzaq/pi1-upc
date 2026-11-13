@@ -9,13 +9,13 @@ Este sistema digitaliza el *Reporte de equipo de perforación de taladros largos
 - Almacenamiento con trazabilidad hasta el recorte.
 - Aprendizaje continuo a partir de las correcciones validadas.
 
-En esta etapa no hay interfaz web. Todo se ejecuta desde la CLI `perfo`.
+Se opera desde la CLI `perfo` o desde una interfaz web local en Next.js (ver [Interfaz web local](#interfaz-web-local)), que usa los mismos servicios a través de una API HTTP.
 
 > La especificación de origen es el documento del proyecto (TB1, capítulos 1 y 3; historias HU01 a HU16). El prompt de construcción está en [`docs/prompt_claude_code.md`](docs/prompt_claude_code.md).
 
 ## Requisitos e instalación
 
-Se necesita Python 3.12. `make install` crea `.venv` con `uv` si está disponible y, si no, con `venv` y `pip`:
+Se necesita Python 3.12. `make install` crea `.venv` con `uv` si está disponible y, si no, con `venv` y `pip`. Instala también el extra `web` (FastAPI, Uvicorn y python-multipart) que usa la interfaz web; si ya tenía el entorno creado, basta con `make install-web`:
 
 ```bash
 make install
@@ -115,6 +115,196 @@ Reglas de la validación:
 
 `perfo review oracle` simula al validador usando el *ground truth* sintético.
 
+## Interfaz web local
+
+La interfaz web permite probar el circuito sin la CLI:
+
+1. Reconocer un formato con el modelo activo o con otra versión.
+2. Ver el resultado campo por campo sobre la imagen alineada.
+3. Revisar y corregir a mano lo que el sistema envió a revisión.
+4. Aprobar el registro.
+5. Reentrenar con esas correcciones y promover el candidato.
+
+Funciona con dos procesos locales:
+
+| Proceso | Qué es | Dirección |
+|---|---|---|
+| API | `perfo serve`: adaptador HTTP (FastAPI) sobre los mismos servicios de aplicación que la CLI | http://127.0.0.1:8000 (documentación interactiva en `/docs`) |
+| Web | Next.js 16 (App Router, TypeScript, Tailwind CSS 4) en `web/` | http://localhost:3100 |
+
+### Requisitos
+
+- **Python.** Python 3.12 con el entorno del proyecto (`make install`, o `make install-web` si el entorno ya existía).
+- **Node.js.** Node.js 20.9 o superior y npm. Se probó con Node 22.22 y npm 10.9.
+- **Espacio de trabajo.** Uno con modelo ajustado y calibrado, maestros importados y corpus sintético. La forma más rápida de tenerlo es `make e2e-smoke`, que tarda unos 6 min con MPS y unos 12 min en CPU.
+
+### Puesta en marcha
+
+```bash
+make install          # entorno Python (una vez)
+make e2e-smoke        # modelo ajustado, calibración, maestros y corpus sintético (una vez)
+make web-install      # dependencias de Next.js (una vez)
+make dev              # API y web en paralelo; Ctrl+C detiene ambas
+```
+
+Si prefiere ver los registros por separado, use dos terminales:
+
+```bash
+make api              # terminal 1: perfo serve sobre la última corrida e2e del perfil smoke
+make web              # terminal 2: next dev en http://localhost:3100
+```
+
+Luego abra http://localhost:3100. La web usa el puerto 3100 y no el 3000 habitual de Next.js porque el 3000 suele estar ocupado por otras herramientas locales (por ejemplo, Metabase en Docker). La barra lateral indica si la API está conectada, el dispositivo (CPU, MPS o CUDA) y el modelo activo.
+
+Opciones:
+
+- **Otra carpeta de trabajo.** `make api` sirve la corrida más reciente de `data/e2e/smoke/`. Para otra, use `make api WS=data/e2e/smoke/<fecha>` o `perfo serve -w <carpeta>`. Con `PROFILE=full` se usa el perfil full.
+- **Otro puerto de la API.** Use `make api PORT=8100` y cree `web/.env.local` con `NEXT_PUBLIC_PERFO_API=http://127.0.0.1:8100` (hay un ejemplo en `web/.env.example`). Después reinicie `make web`.
+- **Versión compilada.** `make web-build` compila la interfaz y la sirve en el puerto 3100. Es más rápida que el modo desarrollo.
+
+> La web modifica la carpeta de trabajo que sirve la API: agrega documentos, correcciones, alias y versiones de modelo. Para volver a empezar, ejecute otra vez `make e2e-smoke`, que crea una carpeta nueva.
+
+### Recorrido de prueba
+
+1. **Reconocer formato.**
+   - *Generar formatos nuevos* crea formatos sintéticos «demo» (`D0001`, `D0002`, …). Usan los mismos maestros y la misma letra de cada operador, tienen verdad conocida y ningún modelo los vio al entrenar.
+   - *Procesar* ejecuta la ingesta, el control de calidad, la alineación, la segmentación, la lectura con TrOCR, las reglas, la homologación y el enrutamiento. Luego abre el resultado.
+   - También puede subir un JPG o PNG propio. Si indica fecha, guardia y equipo, se activa la detección de duplicados.
+2. **Documento.**
+   - Muestra la imagen alineada con una caja por campo: verde si es automático, ámbar si va a revisión y azul si ya tiene decisión. También muestra los tiempos por etapa.
+   - Para cada campo muestra el recorte, el texto leído, el valor propuesto, la confianza calibrada frente al umbral de su tipo, los motivos de revisión y las candidatas de homologación.
+   - En formatos sintéticos agrega la verdad y si el valor coincide, y una pestaña con los errores frente a la verdad.
+3. **Revisión manual.** En cada campo a revisión se puede elegir:
+   - **Confirmar** la propuesta.
+   - **Corregir** el valor. Opcionalmente se agrega el texto tal como está escrito, lo que mejora la etiqueta para el reentrenamiento.
+   - **Elegir una candidata**, con lo que el sistema aprende un alias.
+   - **Marcarlo como vacío.**
+
+   La revisión muestra un campo a la vez, junto al formato alineado, y avanza sola al siguiente campo sin decidir. Atajos de teclado: <kbd>Enter</kbd> confirma, <kbd>E</kbd> corrige, <kbd>V</kbd> marca vacío, <kbd>1</kbd> a <kbd>3</kbd> eligen una candidata del maestro, y <kbd>J</kbd> y <kbd>K</kbd> pasan al campo siguiente o al anterior.
+
+   *Validar registro* guarda una versión inmutable con hash y ofrece abrir el siguiente formato por revisar. Después el Jefe de Guardia aprueba u observa el registro; si lo observa, vuelve a revisión. *Rellenar con la verdad* simula al validador y existe solo para la demo.
+
+   Las decisiones se guardan como borrador en el navegador, así que recargar la página no las borra. Solo cuentan como correcciones para el reentrenamiento después de *Validar registro*. *Volver a leer* descarta el borrador, porque cambia las lecturas sobre las que se decidió.
+
+   Las horas sin AM o PM necesitan el turno para validarse. En los formatos físicos la referencia no trae el turno, así que *Rellenar con la verdad* lo deja por decidir.
+4. **Banco de recortes.**
+   - Prueba el reconocedor por sí solo. Compara versiones (por defecto, la línea base frente al modelo activo) sobre los mismos recortes no vistos.
+   - Reporta exactitud literal, CER, cuántos recortes se aceptarían automáticamente con la calibración de cada versión y cuántos de esos serían errores.
+   - Acepta también un recorte propio.
+5. **Modelos y reentrenamiento.**
+   - *Ejecutar ciclo* corre en segundo plano y muestra su registro en vivo. Los pasos son: snapshot de correcciones, reentrenamiento desde el modelo activo con *replay*, recalibración y compuertas G1–G5. En smoke con MPS tarda de 2 a 4 min.
+   - Si queda un candidato, *Promover* registra la aprobación (G6). La promoción se rechaza si falla una compuerta exigida.
+   - Una vez promovido el candidato, los formatos siguientes se reconocen con él.
+6. **Evolución.**
+   - Muestra cuántos caracteres de cada 100 lee bien cada versión sobre el mismo conjunto de formatos, qué tipos de dato mejoraron y ejemplos de un mismo recorte leído por la primera y la última versión.
+   - Para sumar un punto, ejecute un ciclo con *Ejecutar ciclo* o `perfo cycle run`, y luego `perfo evaluate reference`. Los ejemplos se calculan una vez y quedan en `reports/`.
+   - Un aviso indica si aún no hay reentrenamientos con correcciones, si los formatos son generados o si una versión ya no tiene sus pesos. Con escritura real de operadores, ponga `real_handwriting: true` en la configuración.
+
+### Diseño
+
+La interfaz usa la línea de marca de Hochschild Mining:
+- **Logo e ícono:** tomados de su sitio y guardados en `web/public/brand/`.
+- **Colores:** dorado `#C29A39`, tinta `#24211F`, plata `#BBBCBE` y grises `#F4F4F4`/`#F9F9F9`.
+- **Esquinas:** rectas, como en el sitio.
+
+La tipografía es Outfit, como sustituta libre de su Galano Grotesque, más Helvetica Neue. Los estados (automático, a revisión, decidido y error) tienen colores validados para daltonismo y siempre van con ícono y texto. Los tokens están en `web/app/globals.css`.
+
+### API
+
+La interfaz solo usa estos endpoints. También sirven para integrar otra aplicación.
+
+| Método y ruta | Uso |
+|---|---|
+| `GET /api/health`, `GET /api/status` | Conexión, dispositivo, modelo activo, documentos por estado y correcciones disponibles |
+| `GET /api/samples`, `POST /api/samples/generate`, `POST /api/samples/{id}/process` | Formatos sintéticos de prueba |
+| `POST /api/documents` (multipart) | Registra y reconoce un escaneo (`file`, `user`, `model`, `fecha`, `guardia`, `equipo`) |
+| `GET /api/documents`, `GET /api/documents/{id}` | Lista y detalle de los campos (recorte, lectura, confianza, ruta, motivos, homologación y verdad) |
+| `POST /api/documents/{id}/process`, `POST /api/documents/{id}/confirm-duplicate` | Reprocesa con otra versión de modelo o confirma un duplicado |
+| `POST /api/documents/{id}/validate`, `POST /api/documents/{id}/approve` | Revisión manual (decisiones `confirm`, `correct`, `choose` y `clear`) y aprobación |
+| `GET /api/documents/{id}/trace/{campo}` | Trazabilidad desde el valor hasta el recorte y el documento |
+| `GET /api/bench/crops`, `POST /api/bench/run`, `POST /api/bench/upload` | Banco de recortes |
+| `GET /api/models`, `POST /api/cycle`, `GET /api/jobs/{id}`, `POST /api/models/{v}/promote` | Registro, ciclo de aprendizaje y promoción |
+| `GET /api/evolution`, `GET /api/evolution/examples` | Mediciones por versión y comparación de lecturas recorte por recorte |
+
+La API escucha solo en `127.0.0.1` y no tiene autenticación: está pensada para uso local. Atiende un modelo a la vez. Mientras corre un ciclo, procesar o promover responde 409 con el motivo, pero las consultas siguen funcionando.
+
+### Problemas frecuentes
+
+- **«API sin conexión» o «No se pudo conectar con la API».** Compruebe que `make api` esté corriendo y que `NEXT_PUBLIC_PERFO_API` coincida con el puerto. Después de cambiar `.env.local`, reinicie `make web`.
+- **La primera lectura tarda varios segundos.** Es la carga del modelo en memoria (de 5 a 20 s). Las siguientes tardan alrededor de 1 s por formato con MPS.
+- **Error de CORS.** La API acepta los orígenes `localhost` y `127.0.0.1` en los puertos 3100 y 3000. Si la web corre en otro origen, agréguelo con `perfo serve --origin http://localhost:3200`.
+- **El puerto 3100 está ocupado.** Use `cd web && npx next dev --port 3200` y agregue ese origen a la API como en el punto anterior.
+- **`make web` se cierra con `make: *** [web] Error 1`.** Si la salida dice «Another next dev server is already running», ya hay otro `next dev` en `web/`, aunque sea en otro puerto: Next permite uno por carpeta. Recuerde que `make dev` y `make dev-fisico` ya levantan la web, así que no hace falta `make web` aparte. Para detener el otro servidor, use el PID que muestra el mensaje.
+- **Se reinició la API durante un ciclo.** Los trabajos viven en memoria y ese ciclo se pierde. El registro de modelos no cambia, porque el candidato se registra solo al terminar el entrenamiento. Vuelva a ejecutar el ciclo.
+- **Un PDF queda en ERROR.** El preprocesamiento todavía no rasteriza PDF (ver Limitaciones). Use JPG o PNG.
+- **Datos reales.** Sirva la carpeta de trabajo real con `perfo serve -w <carpeta> --reference ref.csv`. Sin corpus sintético, la página de reconocimiento solo ofrece subir escaneos. La verdad de cada campo aparece cuando el nombre del archivo figura en el CSV de doble digitación.
+
+## Formato físico del proyecto (HU06)
+
+El repositorio del proyecto (`github.com/ronaldroca2017/TESIS`) trae el diseño real del *Reporte de equipo de perforación de taladros largos*. Lo midió HU06 sobre una página plana de referencia (`referencia_plana.png`, 2912×1776 px) e incluye 50 fotos generadas sobre ese diseño, con su verdad. La plantilla v1 de este núcleo se reconstruyó desde el TB1 y no coincide con ese diseño, por lo que se agregó una **plantilla v2** y un **perfil `fisico`**.
+
+### Puesta en marcha
+
+```bash
+make fisico-data      # descarga solo Formatos_fisicos, HU06_plantilla (sin node_modules) y el generador → data/formatos_fisicos/repo
+make fisico           # plantillas reales, códigos, verdad, ingesta, reconocimiento y evaluación contra la verdad (≈ 4 min con MPS)
+make dev-fisico       # API del perfil fisico (con su verdad) y web en http://localhost:3100
+```
+
+Cada paso de `make fisico` hace lo siguiente:
+
+1. Importa el maestro de códigos tomado de la leyenda impresa en el formato (`configs/masters_fisico/codigos.csv`).
+2. Convierte la verdad de HU06 al CSV de referencia por campo (`perfo truth import-boxes`). Cada texto se asigna al campo que cubre la mayor parte de su caja y los textos tachados no cuentan como valor.
+3. Ingesta las 52 imágenes.
+4. Importa el modelo ajustado de la última corrida e2e (`perfo registry import`), sin su calibración.
+5. Procesa con ese modelo (`perfo process --model latest`).
+6. Compara la línea base y el modelo ajustado sobre todos los formatos con verdad (`perfo evaluate reference`).
+
+### Plantilla v2
+
+`perfo template import-hu06` genera `configs/template_v2.json` y su referencia a partir de la plantilla de HU06:
+
+- **Coordenadas y campos.** Conserva las coordenadas de HU06 y los 37 campos priorizados en HU01 (289 instancias con las tablas expandidas).
+- **Identificadores.** Cada campo usa los identificadores de este núcleo (`header.date`, `activities.r03.length_m`, …), así que las reglas, el tipado de horas y la validación funcionan sin cambios. También guarda el ID de la matriz (`matrix_id`, F01–F44) y el de HU06 (`hu06_id`) para la trazabilidad.
+- **Anclas de alineación.** Son las 32 esquinas exteriores de los marcos impresos, que el importador detecta solo. En una búsqueda amplia, los cruces internos de la grilla, que se repiten cada fila, confunden la alineación.
+- **Campos sin maestro.** Operador, labor, estado y ubicación quedan como texto libre hasta contar con los maestros reales (personal, labores). El código de equipo y la guardia quedan como códigos sin lista cerrada.
+
+Ajustes del perfil `fisico` para fotos:
+
+- **Alineación.** Admite una escala de foto a página mayor que la de un escaneo, ORB a mayor resolución, refinamiento por anclas en tres pasadas (amplia, media y fina) y una corrección local de la curvatura de la hoja con un campo de desplazamientos entre las anclas. Hasta un 10 % de las anclas puede quedar tapado o fuera del encuadre.
+- **Segmentación.** En la página plana las filas miden 25 px, la mitad que en v1, así que el margen interior baja a 3 px y la tinta mínima por componente a 4 px; con 12 px se borraba el punto decimal. Además, la marca de repetición debe ser un trazo delgado que atraviese la celda; antes, 373 dígitos de una cifra se tomaban por marcas.
+
+### Resultados sobre las 50 fotos generadas
+
+| Modelo | CER | Exactitud literal | Exactitud por valor |
+|---|---|---|---|
+| TrOCR base sin ajuste | 0,501 | 24,1 % | 27,5 % |
+| Ajustado con los datos sintéticos v1 (`ft-20261017021128`) | 0,194 | 61,1 % | 69,1 % |
+
+- **Alcance.** La evaluación cubre 5 906 campos. Las 50 fotos se alinearon y ninguna celda con texto quedó como vacía.
+- **Mejora del ajuste.** Reduce la CER un 61 % aunque entrenó con otras fuentes y otro diseño.
+- **Por tipo de campo.** La CER del modelo ajustado es 0,09 en códigos, 0,13 en horas, 0,18 en números, 0,14 en fechas y 0,31 en texto libre.
+- **Sesgo.** Los parámetros de segmentación se eligieron con estas mismas 50 fotos, entre 7 variantes, así que la cifra es algo optimista. Hay que confirmarla con formatos nuevos.
+
+### Limitaciones del formato físico
+
+- **Fotos reales.** La plantilla v2 redibuja el formato y no coincide con el papel, así que hay dos plantillas más, medidas sobre las fotos: taladros largos (`ejemplo_03`) y Jackleg (`ejemplo_02`, = `Formato_fisico_01`). Del Jackleg no se lee la malla de perforación, porque es un dibujo. `make fisico-templates` las genera: las definiciones van a `configs/templates_real/` y las referencias planas a `data/plantillas_reales/`, fuera de git porque salen de fotos reales. El sistema prueba primero v2 y, si no reconoce la hoja, usa la alternativa con más correspondencias.
+- **Una sola foto por plantilla.** Cada plantilla se midió sobre la misma foto con la que se probó. No hay otra foto ni verdad, así que falta medir qué tan bien funcionan con hojas nuevas y qué tan bien leen. A 110 ppp todos los campos van a revisión. Para mejorarlas hace falta un escaneo a 300 ppp de cada formato en blanco.
+- **Turno.** Es una casilla (Día/Noche/C. Guardia) y la verdad de HU06 no la incluye. TrOCR lee las etiquetas impresas, así que el turno siempre va a revisión. Mientras tanto, las horas de 12 h sin sufijo quedan ambiguas. Falta un detector de marca.
+- **Sin calibración.** No hay calibración para este formato, así que todos los campos van a revisión. Para aceptar automáticamente hay que calibrar con una partición de estas fotos (o de formatos reales).
+- **Datos generados.** En el 13 % de las filas (78 de 617), el % de desviación no cumple la fórmula impresa en el formato; las reglas lo marcan, como pide el TB1.
+
+## Control de resolución
+
+La resolución se mide en ppp equivalentes: el lado mayor de la imagen frente al de la página de referencia, a la resolución de la plantilla. Hay dos niveles:
+
+- **Mínimo aceptado** (`preprocessing.min_dpi`, 80 ppp por defecto). Por debajo, la imagen se rechaza en el control de calidad. El mensaje indica el tamaño de la imagen y cuántos píxeles harían falta.
+- **Resolución recomendada** (la de la plantilla: 200 ppp, según el TB1). Entre ambos valores el documento se procesa con un aviso de calidad, visible en la web y en la causa del estado. Además, todos sus campos van a revisión con el motivo «Imagen bajo la resolución recomendada», porque la calibración de la confianza se midió a la resolución recomendada y no garantiza el riesgo por debajo de ella. Esto se desactiva con `routing.low_resolution_forces_review: false`.
+
+Medido sobre `gen_001`: al reducir la foto de 2560 a 1280 px (110 ppp), la CER del modelo ajustado sube de 0,229 a 0,351 y las celdas exactas bajan del 51 % al 30 %.
+
+El escaneo defectuoso de baja resolución del corpus sintético se genera a 75 ppp, para que el e2e siga probando el rechazo.
+
 ## Arquitectura
 
 La solución sigue una arquitectura hexagonal (puertos y adaptadores):
@@ -130,9 +320,13 @@ src/perfo/
   ml/            dataset, train, evaluate, metrics, pipeline (calibración y enrutamiento), learning_cycle
   synth/         plantilla v1, render del formato, escritura simulada, ruido, maestros, oráculo
   reporting/     reporte e2e, gráficos, hoja de revisión
+  adapters/http/ API FastAPI para la interfaz web (adaptador de entrada, sin reglas de negocio)
+  adapters/hu06/ importación de la plantilla y de la verdad por cajas del formato físico (HU06)
   cli.py · e2e.py · bootstrap.py (raíz de composición)
-configs/         default.yaml · thresholds.yaml · abbreviations.yaml · profiles/{smoke,full}.yaml
+web/             interfaz Next.js: app/ (páginas), components/, lib/ (cliente de la API y tipos)
+configs/         default.yaml · thresholds.yaml · abbreviations.yaml · profiles/{smoke,full,fisico}.yaml
                  template_v1.json · template_v1_reference.png · field_priority.csv (matriz, IE1)
+                 template_v2.json · template_v2_reference.png · masters_fisico/codigos.csv (formato físico, HU06)
 ```
 
 Estos componentes se pueden reemplazar sin tocar el núcleo, porque cada uno está detrás de su puerto:
@@ -226,4 +420,5 @@ La suite de pruebas automatizadas (pytest) todavía no se ha creado. Por pedido 
 - **Homologación optimista.** Las variantes de labores se generan con el mismo diccionario de abreviaturas que usa la homologación, por lo que la Exactitud@1 sobre texto literal resulta casi perfecta.
 - **Calibración en smoke.** En el perfil smoke la mitad de calibración es pequeña y varios tipos de campo no alcanzan el soporte mínimo. Por diseño, esos campos van a revisión.
 - **Reproducibilidad.** El entrenamiento en MPS no es reproducible bit a bit. La compuerta G5 verifica la semilla, el hash del snapshot y el hash del artefacto, no un reentrenamiento idéntico.
+- **Interfaz web.** Es para uso local: no tiene autenticación ni roles, los trabajos de reentrenamiento viven en la memoria del proceso de la API y se atiende un modelo a la vez.
 - **PDF.** La ingesta acepta PDF y lo registra, pero el preprocesamiento solo decodifica imágenes (JPG/PNG). Un PDF queda en `ERROR` con su causa hasta que se agregue un rasterizador, por ejemplo `pypdfium2`.

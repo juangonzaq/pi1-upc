@@ -91,6 +91,10 @@ class RepositoryPort(ABC):
     @abstractmethod
     def get_field_value(self, fv_id: str) -> FieldValue | None: ...
 
+    @abstractmethod
+    def field_value_counts(self) -> dict[str, dict[str, int]]:
+        """Per document, number of fields by route ({"AUTO": n, "REVIEW": n}) in its latest run."""
+
     # validation, corrections, approvals ---------------------------------
     @abstractmethod
     def add_validated_record(self, record: ValidatedRecord) -> None: ...

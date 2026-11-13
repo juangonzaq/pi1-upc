@@ -1,0 +1,31 @@
+tipo,codigo,descripcion
+actividad,101,Perforación abanico (+)
+actividad,102,Perforación abanico (-)
+actividad,103,Perforación paralelo (+)
+actividad,104,Perforación paralelo (-)
+actividad,105,Perforación horizontal
+actividad,106,Desquinche
+actividad,107,Perforación en realce
+demora,201,Reparto de guardia
+demora,202,Traslado a mina
+demora,203,Traslado a labor
+demora,204,Inspección de equipo
+demora,205,Falta de combustible
+demora,206,Esperando orden
+demora,207,Traslado de equipo
+demora,208,Inspección de labor / desate
+demora,209,Instalación de agua y energía
+demora,210,Esperando frente de trabajo
+demora,211,Falta de aceros
+demora,212,Recuperación de aceros
+demora,213,Ventilación deficiente
+demora,214,Voladura secundaria
+demora,215,Otros (especifique)
+demora,216,Falta de agua
+demora,217,Refrigerio
+falla,301,Falla mecánica
+falla,302,Falla eléctrica
+falla,303,Mantenimiento preventivo
+falla,304,Caída de tensión
+falla,305,Accidente / incidente
+falla,306,Otros (especifique)

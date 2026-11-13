@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict
@@ -51,7 +52,15 @@ class SqlRepository(RepositoryPort):
 
         m.Base.metadata.create_all(self.engine)
         self._factory = sessionmaker(self.engine, expire_on_commit=False)
-        self._tx: Session | None = None
+        self._local = threading.local()  # the open transaction belongs to the calling thread (HTTP adapter, background jobs)
+
+    @property
+    def _tx(self) -> Session | None:
+        return getattr(self._local, "tx", None)
+
+    @_tx.setter
+    def _tx(self, session: Session | None) -> None:
+        self._local.tx = session
 
     # ------------------------------------------------------------ sessions
     @contextmanager
@@ -363,6 +372,21 @@ class SqlRepository(RepositoryPort):
         with self._s() as s:
             r = s.get(m.FieldValueRow, fv_id)
             return self._fv(s, r) if r else None
+
+    def field_value_counts(self) -> dict[str, dict[str, int]]:
+        fv = m.FieldValueRow
+        with self._s() as s:
+            rows = s.execute(select(fv.document_id, fv.run_id, func.max(fv.created_at), fv.route, func.count())
+                             .group_by(fv.document_id, fv.run_id, fv.route)).all()
+        latest: dict[str, tuple[Any, str]] = {}
+        for doc_id, run_id, created, _, _ in rows:
+            if doc_id not in latest or created > latest[doc_id][0]:
+                latest[doc_id] = (created, run_id)
+        out: dict[str, dict[str, int]] = {}
+        for doc_id, run_id, _, route, n in rows:
+            if latest[doc_id][1] == run_id:
+                out.setdefault(doc_id, {})[route] = int(n)
+        return out
 
     # ------------------------------------------------------------ validation
     def add_validated_record(self, record: ValidatedRecord) -> None:

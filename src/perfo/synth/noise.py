@@ -59,7 +59,7 @@ def scan(page: Image.Image, rng: random.Random, strength: float = 1.0, bad: str 
     params.update(blur=round(sigma, 3))
 
     if bad == "low_res":
-        small = cv2.resize(img, (out_w * 2 // 5, out_h * 2 // 5), interpolation=cv2.INTER_AREA)
+        small = cv2.resize(img, (out_w // 4, out_h // 4), interpolation=cv2.INTER_AREA)  # 75 ppp: below the 80 ppp floor
         img = small
         params["bad"] = "low_res"
     elif bad == "cut":
@@ -69,7 +69,7 @@ def scan(page: Image.Image, rng: random.Random, strength: float = 1.0, bad: str 
     img = np.clip(img, 0, 255).astype(np.uint8)
     buf = io.BytesIO()
     q = rng.randint(86, 93)
-    dpi = 300 if bad != "low_res" else 120
+    dpi = 300 if bad != "low_res" else 75
     Image.fromarray(img).save(buf, format="JPEG", quality=q, dpi=(dpi, dpi))
     params["jpeg_quality"] = q
     return buf.getvalue(), params

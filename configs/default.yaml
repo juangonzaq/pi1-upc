@@ -3,6 +3,7 @@ workspace: data/workspace
 template: configs/template_v1.json
 abbreviations: configs/abbreviations.yaml
 seed: 1234
+real_handwriting: false  # true cuando la verdad de referencia venga de escritura real de operadores, no de formatos generados
 device: auto            # auto | cpu | mps | cuda
 
 model:
@@ -19,6 +20,8 @@ recognition:
 preprocessing:
   orb_features: 6000
   work_scale: 0.35
+  min_dpi: 80               # rechazo: por debajo la imagen es ilegible. Entre este valor y la resolución de la plantilla
+                            # (TB1: 200 ppp) se procesa con aviso de calidad y todos los campos van a revisión
 
 segmentation:
   inset_px: 4
@@ -31,6 +34,7 @@ segmentation:
 
 routing:
   repeat_mark_forces_review: true
+  low_resolution_forces_review: true   # la calibración se midió con imágenes a la resolución recomendada
 
 rules:
   deviation_limit_pct: 2.0

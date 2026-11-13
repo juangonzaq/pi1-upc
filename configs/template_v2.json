@@ -1,0 +1,884 @@
+{
+ "template_id": "reporte-perforacion-tl",
+ "version": "2.0",
+ "valid_from": "2026-10-16",
+ "description": "Formato físico de taladros largos (diseño medido en HU06 sobre la página plana de referencia; origen HU06 v1.0: CONGELADA sobre la pagina plana de referencia, con la distribucion del formato real de perforacion de taladros largos (medida sobre Formato_fisico_02.jpeg, foto de 1280x719). Pendiente recalibrar con un escaneo real a 300 ppp.)",
+ "source": {
+  "hu06_template": "reporte-perforacion-tl",
+  "hu06_version": "1.0",
+  "fields_origin": "HU01_Matriz_Consolidada_RFL_Priorizacion.xlsx (campos con Prioritario = Sí)",
+  "excluded_hu01": [
+   "F06 Tajo",
+   "F12 N.° de actividad",
+   "F16 Labor",
+   "F17 Taladro repasado",
+   "F18 N.° de fila",
+   "F22 Ángulo programado",
+   "F23 Ángulo ejecutado",
+   "F45 Observaciones del control de aceros",
+   "F46 Observaciones generales"
+  ],
+  "hu06_tolerances": {
+   "rotacion_max_grados": 5,
+   "inliers_min": 150,
+   "razon_inliers_min": 0.5,
+   "aspecto_min": 0.75,
+   "aspecto_max": 1.33,
+   "tinta_vacia": 0.004
+  }
+ },
+ "reference": {
+  "width": 2912,
+  "height": 1776,
+  "dpi": 250
+ },
+ "reference_image": "configs/template_v2_reference.png",
+ "alignment": {
+  "tolerance_px": 12,
+  "min_inliers": 40,
+  "max_reproj_error_px": 4.0,
+  "min_dpi": 200,
+  "min_sharpness": 15.0,
+  "max_outlier_ratio": 0.1
+ },
+ "anchors": [
+  [
+   0.020948,
+   0.54955
+  ],
+  [
+   0.020948,
+   0.707207
+  ],
+  [
+   0.788805,
+   0.706644
+  ],
+  [
+   0.788805,
+   0.548986
+  ],
+  [
+   0.061126,
+   0.179617
+  ],
+  [
+   0.06147,
+   0.531532
+  ],
+  [
+   0.79636,
+   0.530405
+  ],
+  [
+   0.796016,
+   0.178491
+  ],
+  [
+   0.569712,
+   0.178491
+  ],
+  [
+   0.569368,
+   0.125
+  ],
+  [
+   0.410371,
+   0.125
+  ],
+  [
+   0.409684,
+   0.178491
+  ],
+  [
+   0.06147,
+   0.072072
+  ],
+  [
+   0.061813,
+   0.122748
+  ],
+  [
+   0.554258,
+   0.122185
+  ],
+  [
+   0.554258,
+   0.071509
+  ],
+  [
+   0.06147,
+   0.13232
+  ],
+  [
+   0.06147,
+   0.177365
+  ],
+  [
+   0.223214,
+   0.176802
+  ],
+  [
+   0.223214,
+   0.131757
+  ],
+  [
+   0.584821,
+   0.114865
+  ],
+  [
+   0.584821,
+   0.167793
+  ],
+  [
+   0.919643,
+   0.16723
+  ],
+  [
+   0.919643,
+   0.114302
+  ],
+  [
+   0.658654,
+   0.73536
+  ],
+  [
+   0.658997,
+   0.819257
+  ],
+  [
+   0.994162,
+   0.818131
+  ],
+  [
+   0.993819,
+   0.734234
+  ],
+  [
+   0.797734,
+   0.170608
+  ],
+  [
+   0.79739,
+   0.70045
+  ],
+  [
+   0.978022,
+   0.70045
+  ],
+  [
+   0.978365,
+   0.170608
+  ]
+ ],
+ "code_sets": {
+  "shift": {
+   "values": [
+    "D",
+    "N",
+    "C"
+   ],
+   "synonyms": {
+    "DIA": "D",
+    "NOCHE": "N",
+    "C/GUARDIA": "C",
+    "CGUARDIA": "C"
+   }
+  },
+  "activity_codes": {
+   "master": "codigos",
+   "kind": "actividad",
+   "values": [
+    "101",
+    "102",
+    "103",
+    "104",
+    "105",
+    "106",
+    "107"
+   ]
+  },
+  "delay_codes": {
+   "master": "codigos",
+   "kind": "demora",
+   "values": [
+    "201",
+    "202",
+    "203",
+    "204",
+    "205",
+    "206",
+    "207",
+    "208",
+    "209",
+    "210",
+    "211",
+    "212",
+    "213",
+    "214",
+    "215",
+    "216",
+    "217"
+   ]
+  },
+  "failure_codes": {
+   "master": "codigos",
+   "kind": "falla",
+   "values": [
+    "301",
+    "302",
+    "303",
+    "304",
+    "305",
+    "306"
+   ]
+  }
+ },
+ "fields": [
+  {
+   "id": "header.date",
+   "block": "header",
+   "label": "Fecha",
+   "type": "date",
+   "box": [
+    0.082418,
+    0.131081,
+    0.220879,
+    0.154054
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F01",
+   "hu06_id": "cab.fecha"
+  },
+  {
+   "id": "header.shift",
+   "block": "header",
+   "label": "Turno",
+   "type": "code",
+   "code_set": "shift",
+   "box": [
+    0.089011,
+    0.154054,
+    0.202747,
+    0.175676
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F02",
+   "hu06_id": "cab.turno"
+  },
+  {
+   "id": "header.crew",
+   "block": "header",
+   "label": "Guardia",
+   "type": "code",
+   "box": [
+    0.825,
+    0.051351,
+    0.918132,
+    0.075676
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F03",
+   "hu06_id": "cab.guardia"
+  },
+  {
+   "id": "header.equipment",
+   "block": "header",
+   "label": "Código de equipo",
+   "type": "code",
+   "box": [
+    0.689011,
+    0.024324,
+    0.74011,
+    0.048649
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F04",
+   "hu06_id": "cab.cod_equipo"
+  },
+  {
+   "id": "header.operator",
+   "block": "header",
+   "label": "Operador",
+   "type": "free_text",
+   "box": [
+    0.689011,
+    0.078378,
+    0.918132,
+    0.102703
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F05",
+   "hu06_id": "cab.operador"
+  },
+  {
+   "id": "header.engine_hm_start",
+   "block": "header",
+   "label": "Horómetro de motor inicial",
+   "type": "numeric",
+   "subtype": "decimal",
+   "box": [
+    0.445055,
+    0.141892,
+    0.502747,
+    0.159459
+   ],
+   "priority": true,
+   "required": "no",
+   "matrix_id": "F07",
+   "hu06_id": "cab.hor_motor_ini"
+  },
+  {
+   "id": "header.engine_hm_end",
+   "block": "header",
+   "label": "Horómetro de motor final",
+   "type": "numeric",
+   "subtype": "decimal",
+   "box": [
+    0.445055,
+    0.159459,
+    0.502747,
+    0.177027
+   ],
+   "priority": true,
+   "required": "no",
+   "matrix_id": "F08",
+   "hu06_id": "cab.hor_motor_fin"
+  },
+  {
+   "id": "header.percussion_hm_start",
+   "block": "header",
+   "label": "Horómetro de percusión inicial",
+   "type": "numeric",
+   "subtype": "decimal",
+   "box": [
+    0.502747,
+    0.141892,
+    0.568681,
+    0.159459
+   ],
+   "priority": true,
+   "required": "no",
+   "matrix_id": "F09",
+   "hu06_id": "cab.hor_perc_ini"
+  },
+  {
+   "id": "header.percussion_hm_end",
+   "block": "header",
+   "label": "Horómetro de percusión final",
+   "type": "numeric",
+   "subtype": "decimal",
+   "box": [
+    0.502747,
+    0.159459,
+    0.568681,
+    0.177027
+   ],
+   "priority": true,
+   "required": "no",
+   "matrix_id": "F10",
+   "hu06_id": "cab.hor_perc_fin"
+  },
+  {
+   "id": "header.initial_state",
+   "block": "header",
+   "label": "Estado inicial del equipo",
+   "type": "free_text",
+   "box": [
+    0.712088,
+    0.051351,
+    0.782967,
+    0.075676
+   ],
+   "priority": true,
+   "required": "no",
+   "matrix_id": "F11",
+   "hu06_id": "cab.estado_ini"
+  },
+  {
+   "id": "closing.location",
+   "block": "closing",
+   "label": "Ubicación final del equipo",
+   "type": "free_text",
+   "box": [
+    0.116209,
+    0.768919,
+    0.25467,
+    0.790541
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F38",
+   "hu06_id": "cie.ubicacion"
+  },
+  {
+   "id": "closing.final_state",
+   "block": "closing",
+   "label": "Estado final del equipo",
+   "type": "free_text",
+   "box": [
+    0.363462,
+    0.768919,
+    0.423626,
+    0.790541
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F39",
+   "hu06_id": "cie.estado_fin"
+  },
+  {
+   "id": "closing.gallons",
+   "block": "closing",
+   "label": "N.° de galones",
+   "type": "numeric",
+   "subtype": "decimal",
+   "box": [
+    0.466484,
+    0.768919,
+    0.618132,
+    0.790541
+   ],
+   "priority": true,
+   "required": "always",
+   "matrix_id": "F40",
+   "hu06_id": "cie.galones"
+  }
+ ],
+ "tables": [
+  {
+   "id": "activities",
+   "block": "activities",
+   "title": "Actividades",
+   "rows": 22,
+   "box": [
+    0.082418,
+    0.217568,
+    0.79533,
+    0.52973
+   ],
+   "header_height": 0.0,
+   "row_height": 0.014189,
+   "columns": [
+    {
+     "id": "code",
+     "label": "Código de actividad",
+     "type": "code",
+     "code_set": "activity_codes",
+     "x0": 0.082418,
+     "x1": 0.123626,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F13",
+     "hu06_id": "act.codigo"
+    },
+    {
+     "id": "start",
+     "label": "Hora u horómetro inicial",
+     "type": "time",
+     "x0": 0.123626,
+     "x1": 0.173077,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F14",
+     "hu06_id": "act.hora_ini"
+    },
+    {
+     "id": "end",
+     "label": "Hora u horómetro final",
+     "type": "time",
+     "x0": 0.173077,
+     "x1": 0.224176,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F15",
+     "hu06_id": "act.hora_fin"
+    },
+    {
+     "id": "holes",
+     "label": "N.° de taladros",
+     "type": "numeric",
+     "subtype": "integer",
+     "min": 0,
+     "max": 99,
+     "x0": 0.426923,
+     "x1": 0.464011,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F19",
+     "hu06_id": "act.n_taladros"
+    },
+    {
+     "id": "bars",
+     "label": "N.° de barras usadas",
+     "type": "numeric",
+     "subtype": "integer",
+     "min": 0,
+     "max": 99,
+     "x0": 0.464011,
+     "x1": 0.502747,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F20",
+     "hu06_id": "act.n_barras"
+    },
+    {
+     "id": "length_m",
+     "label": "Longitud del taladro (m)",
+     "type": "numeric",
+     "subtype": "decimal",
+     "min": 0,
+     "max": 60,
+     "x0": 0.502747,
+     "x1": 0.529945,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F21",
+     "hu06_id": "act.longitud"
+    },
+    {
+     "id": "deviation_m",
+     "label": "Desviación (m)",
+     "type": "numeric",
+     "subtype": "decimal",
+     "x0": 0.585165,
+     "x1": 0.641209,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F24",
+     "hu06_id": "act.desv_m"
+    },
+    {
+     "id": "deviation_pct",
+     "label": "Desviación (%)",
+     "type": "numeric",
+     "subtype": "decimal",
+     "x0": 0.641209,
+     "x1": 0.692308,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F25",
+     "hu06_id": "act.desv_pct"
+    },
+    {
+     "id": "notes",
+     "label": "Observaciones de actividad",
+     "type": "free_text",
+     "x0": 0.692308,
+     "x1": 0.79533,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F26",
+     "hu06_id": "act.obs"
+    }
+   ]
+  },
+  {
+   "id": "delays",
+   "block": "delays",
+   "title": "Demoras operativas",
+   "rows": 6,
+   "box": [
+    0.021429,
+    0.582432,
+    0.422802,
+    0.705676
+   ],
+   "header_height": 0.0,
+   "row_height": 0.020541,
+   "columns": [
+    {
+     "id": "labor",
+     "label": "Labor (demora)",
+     "type": "free_text",
+     "x0": 0.021429,
+     "x1": 0.085714,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F27",
+     "hu06_id": "dem.labor"
+    },
+    {
+     "id": "code",
+     "label": "Código de demora (201–217)",
+     "type": "code",
+     "code_set": "delay_codes",
+     "x0": 0.085714,
+     "x1": 0.129396,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F28",
+     "hu06_id": "dem.codigo"
+    },
+    {
+     "id": "start",
+     "label": "Hora inicial de demora",
+     "type": "time",
+     "x0": 0.129396,
+     "x1": 0.175549,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F29",
+     "hu06_id": "dem.hora_ini"
+    },
+    {
+     "id": "end",
+     "label": "Hora final de demora",
+     "type": "time",
+     "x0": 0.175549,
+     "x1": 0.225824,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F30",
+     "hu06_id": "dem.hora_fin"
+    },
+    {
+     "id": "notes",
+     "label": "Observación de demora",
+     "type": "free_text",
+     "x0": 0.225824,
+     "x1": 0.422802,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F31",
+     "hu06_id": "dem.obs"
+    }
+   ]
+  },
+  {
+   "id": "failures",
+   "block": "failures",
+   "title": "Paradas por fallas",
+   "rows": 6,
+   "box": [
+    0.422802,
+    0.582432,
+    0.787912,
+    0.705676
+   ],
+   "header_height": 0.0,
+   "row_height": 0.020541,
+   "columns": [
+    {
+     "id": "labor",
+     "label": "Labor (falla)",
+     "type": "free_text",
+     "x0": 0.422802,
+     "x1": 0.46978,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F32",
+     "hu06_id": "par.labor"
+    },
+    {
+     "id": "code",
+     "label": "Código de falla (301–306)",
+     "type": "code",
+     "code_set": "failure_codes",
+     "x0": 0.46978,
+     "x1": 0.522527,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F33",
+     "hu06_id": "par.codigo"
+    },
+    {
+     "id": "start",
+     "label": "Hora inicial de falla",
+     "type": "time",
+     "x0": 0.522527,
+     "x1": 0.576099,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F34",
+     "hu06_id": "par.hora_ini"
+    },
+    {
+     "id": "end",
+     "label": "Hora final de falla",
+     "type": "time",
+     "x0": 0.576099,
+     "x1": 0.653571,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F35",
+     "hu06_id": "par.hora_fin"
+    },
+    {
+     "id": "total_hours",
+     "label": "Horas totales de falla",
+     "type": "numeric",
+     "subtype": "decimal",
+     "x0": 0.653571,
+     "x1": 0.699725,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F36",
+     "hu06_id": "par.h_total"
+    },
+    {
+     "id": "notes",
+     "label": "Observación de falla",
+     "type": "free_text",
+     "x0": 0.699725,
+     "x1": 0.787912,
+     "priority": true,
+     "required": "no",
+     "matrix_id": "F37",
+     "hu06_id": "par.obs"
+    }
+   ]
+  },
+  {
+   "id": "steel",
+   "block": "steel",
+   "title": "Control de aceros",
+   "rows": 3,
+   "box": [
+    0.659341,
+    0.762162,
+    0.861264,
+    0.817584
+   ],
+   "header_height": 0.0,
+   "row_height": 0.018474,
+   "columns": [
+    {
+     "id": "bits",
+     "label": "Cantidad de brocas",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.659341,
+     "x1": 0.707967,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F41",
+     "hu06_id": "ace.brocas"
+    },
+    {
+     "id": "rods",
+     "label": "Cantidad de barras",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.707967,
+     "x1": 0.750824,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F42",
+     "hu06_id": "ace.barras"
+    },
+    {
+     "id": "tube",
+     "label": "Cantidad de tubos",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.750824,
+     "x1": 0.791209,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F43",
+     "hu06_id": "ace.tubos"
+    },
+    {
+     "id": "shank",
+     "label": "Cantidad de shank",
+     "type": "numeric",
+     "subtype": "integer",
+     "x0": 0.791209,
+     "x1": 0.861264,
+     "priority": true,
+     "required": "if_row",
+     "matrix_id": "F44",
+     "hu06_id": "ace.shank"
+    }
+   ]
+  }
+ ],
+ "signatures": [
+  {
+   "id": "signatures.operator",
+   "label": "Operador de equipo",
+   "box": [
+    0.004808,
+    0.787162,
+    0.124657,
+    0.858671
+   ]
+  },
+  {
+   "id": "signatures.shift_boss",
+   "label": "Jefe de guardia de mina",
+   "box": [
+    0.217376,
+    0.787162,
+    0.330701,
+    0.858671
+   ]
+  },
+  {
+   "id": "signatures.maintenance",
+   "label": "Responsable de mantenimiento",
+   "box": [
+    0.419986,
+    0.787162,
+    0.550824,
+    0.858671
+   ]
+  },
+  {
+   "id": "signatures.drilling_blasting",
+   "label": "Perforación y voladura",
+   "box": [
+    0.683036,
+    0.787162,
+    0.869505,
+    0.858671
+   ]
+  }
+ ],
+ "static": {
+  "codes": {
+   "ACTIVIDADES": {
+    "101": "Perforación abanico (+)",
+    "102": "Perforación abanico (-)",
+    "103": "Perforación paralelo (+)",
+    "104": "Perforación paralelo (-)",
+    "105": "Perforación horizontal",
+    "106": "Desquinche",
+    "107": "Perforación en realce"
+   },
+   "DEMORAS": {
+    "201": "Reparto de guardia",
+    "202": "Traslado a mina",
+    "203": "Traslado a labor",
+    "204": "Inspección de equipo",
+    "205": "Falta de combustible",
+    "206": "Esperando orden",
+    "207": "Traslado de equipo",
+    "208": "Inspección de labor / desate",
+    "209": "Instalación de agua y energía",
+    "210": "Esperando frente de trabajo",
+    "211": "Falta de aceros",
+    "212": "Recuperación de aceros",
+    "213": "Ventilación deficiente",
+    "214": "Voladura secundaria",
+    "215": "Otros (especifique)",
+    "216": "Falta de agua",
+    "217": "Refrigerio"
+   },
+   "FALLAS": {
+    "301": "Falla mecánica",
+    "302": "Falla eléctrica",
+    "303": "Mantenimiento preventivo",
+    "304": "Caída de tensión",
+    "305": "Accidente / incidente",
+    "306": "Otros (especifique)"
+   }
+  }
+ }
+}

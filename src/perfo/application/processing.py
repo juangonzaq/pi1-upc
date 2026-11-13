@@ -52,6 +52,7 @@ class DocumentProcessor:
         masters: MasterDataPort | None,
         routing_policy: Callable[[], RoutingPolicy],
         actor: str = "sistema",
+        alternatives: list[tuple[Template, str]] | None = None,
     ):
         self.repo = repo
         self.storage = storage
@@ -64,6 +65,7 @@ class DocumentProcessor:
         self.masters = masters
         self.routing_policy = routing_policy
         self.actor = actor
+        self.alternatives = alternatives or []
 
     # ------------------------------------------------------------------ helpers
     def _move(self, doc: Document, target: DocumentState, cause: str | None) -> None:
@@ -102,9 +104,15 @@ class DocumentProcessor:
         # 1. quality control + preprocessing
         t0 = time.perf_counter()
         original = self.storage.get(doc.original_key)
-        pre = preprocess(original, self.template, self.reference_path, self.cfg.get_path("preprocessing", {}))
+        template, reference_path = self.template, self.reference_path
+        pre = preprocess(original, template, reference_path, self.cfg.get_path("preprocessing", {}))
+        if not pre.ok:  # another printed form: the template that recognizes the page with most correspondences wins
+            tried = [(preprocess(original, t, ref, self.cfg.get_path("preprocessing", {})), t, ref) for t, ref in self.alternatives]
+            accepted = [o for o in tried if o[0].ok]
+            if accepted:
+                pre, template, reference_path = max(accepted, key=lambda o: o[0].transform.get("inliers", 0))
         stages["preprocess"] = time.perf_counter() - t0
-        doc.template_version = self.template.version
+        doc.template_version = template.version
         if not pre.ok:
             doc.transform = pre.transform
             self._move(doc, DocumentState.ERROR, pre.cause)
@@ -113,17 +121,18 @@ class DocumentProcessor:
         ok, buf = cv2.imencode(".jpg", pre.image, [cv2.IMWRITE_JPEG_QUALITY, 95])
         pre_bytes = buf.tobytes()
         pre_key = f"preprocessed/{doc.id}/{hashlib.sha256(pre_bytes).hexdigest()[:16]}.jpg"
-        self.storage.put(pre_key, pre_bytes, {"document_id": doc.id, "template_version": self.template.version, "transform": pre.transform})
+        self.storage.put(pre_key, pre_bytes, {"document_id": doc.id, "template_version": template.version, "transform": pre.transform})
         doc.preprocessed_key = pre_key
         doc.transform = pre.transform
-        page = Page(new_id(), doc.id, 1, pre_key, self.template.width, self.template.height, pre.transform.get("dpi_equivalent", 0.0))
+        page = Page(new_id(), doc.id, 1, pre_key, template.width, template.height, pre.transform.get("dpi_equivalent", 0.0))
         self.repo.add_page(page)
 
         # 2. segmentation
         t0 = time.perf_counter()
-        seg = segment(pre.image, self.template, self.reference_path, self.cfg.get_path("segmentation", {}))
+        seg = segment(pre.image, template, reference_path, self.cfg.get_path("segmentation", {}))
         stages["segment"] = time.perf_counter() - t0
-        doc.metadata = {**doc.metadata, "signatures": seg.signatures, "alignment": {k: v for k, v in seg.alignment.items() if k != "anchors"}}
+        doc.metadata = {**doc.metadata, "signatures": seg.signatures, "alignment": {k: v for k, v in seg.alignment.items() if k != "anchors"},
+                        "quality_warnings": list(pre.transform.get("quality_warnings", []))}
         if not seg.ok:
             self._move(doc, DocumentState.EN_REVISION, seg.cause)
             self.telemetry.event("alineacion_fuera_de_tolerancia", document_id=doc.id, cause=seg.cause)
@@ -135,7 +144,7 @@ class DocumentProcessor:
                 sha = hashlib.sha256(ci.png).hexdigest()
                 key = f"crops/{doc.id}/{ci.spec.id}-{sha[:16]}.png"
                 self.storage.put(key, ci.png, {"document_id": doc.id, "field_id": ci.spec.id, "box_px": list(ci.box_px)})
-            crops.append(Crop(new_id(), doc.id, page.id, ci.spec.id, self.template.version, ci.box_px, key, sha, ci.is_empty, ci.ink_ratio, ci.mark))
+            crops.append(Crop(new_id(), doc.id, page.id, ci.spec.id, template.version, ci.box_px, key, sha, ci.is_empty, ci.ink_ratio, ci.mark))
         crops = self.repo.upsert_crops(crops)
         if until == "segment":
             self.repo.update_document(doc)
@@ -144,7 +153,7 @@ class DocumentProcessor:
         # 3. recognition (only non-empty crops with ink)
         t0 = time.perf_counter()
         to_read = [c for c in crops if c.object_key and not c.is_empty and c.mark is None]
-        spec_of = {f.id: f for f in self.template.fields}
+        spec_of = {f.id: f for f in template.fields}
         try:
             outputs = self._recognize_with_retry([(self.storage.get(c.object_key), spec_of[c.field_id].type.value) for c in to_read]) if to_read else []  # type: ignore[arg-type]
         except RecognizerUnavailable as exc:
@@ -172,7 +181,9 @@ class DocumentProcessor:
             except Exception:  # noqa: BLE001
                 codes = None
         rule_cfg = RuleConfig(**{k: v for k, v in (self.cfg.get_path("rules", {}) or {}).items()})
-        structured = structure(self.template, inputs, effective_code_sets(self.template, codes), self.homologator, self.routing_policy(), rule_cfg)
+        low_res = bool((doc.transform or {}).get("low_resolution"))
+        structured = structure(template, inputs, effective_code_sets(template, codes), self.homologator, self.routing_policy(), rule_cfg,
+                               low_resolution=low_res)
         stages["structure"] = time.perf_counter() - t0
         run_id = new_id()
         values = [self._field_value(doc.id, run_id, sf) for sf in structured]
@@ -181,6 +192,8 @@ class DocumentProcessor:
             self.repo.add_field_values(values)
             self._move(doc, DocumentState.PROCESADO, None)
             cause = f"{n_review} de {len(values)} campos requieren revisión" if n_review else f"0 de {len(values)} campos requieren revisión; confirme el registro"
+            if low_res:
+                cause += f" · baja resolución ({(doc.transform or {}).get('dpi_equivalent', 0):.0f} ppp; se recomiendan {template.alignment.min_dpi:.0f})"
             self._move(doc, DocumentState.EN_REVISION, cause)
             self.repo.add_audit(AuditEvent("document_processed", "document", doc.id, self.actor, after={"run_id": run_id, "fields": len(values), "review": n_review}))
         total = time.perf_counter() - t_start

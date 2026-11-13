@@ -54,6 +54,7 @@ def structure(
     homologator: Homologator | None,
     policy: RoutingPolicy,
     rule_cfg: RuleConfig,
+    low_resolution: bool = False,
 ) -> list[StructuredField]:
     by_id = {i.spec.id: i for i in inputs}
 
@@ -116,6 +117,7 @@ def structure(
                 homologation_ok=hom_ok,
                 required_missing=sf.required_missing,
                 repeat_mark=sf.inp.mark == "repeat",
+                low_resolution=low_resolution,
             ),
             policy,
         )

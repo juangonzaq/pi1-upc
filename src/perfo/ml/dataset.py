@@ -219,7 +219,7 @@ class LiteralLabeler:
 def build_weak_dataset(c: Any, history_csv: str | Path, baseline_version: str, max_distance: float, batch: str | None = "historical") -> DatasetBuild:
     history = load_history(history_csv)
     labeler = LiteralLabeler(c.masters, c.abbreviations)
-    spec_of = {f.id: f for f in c.template.fields}
+    spec_of = c.spec_of
     docs = [d for d in c.repo.list_documents() if batch is None or d.metadata.get("batch") == batch]
     aligned, excluded, items = [], {}, []
     excluded_crops: Counter = Counter()
