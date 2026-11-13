@@ -8,6 +8,8 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
+from perfo.synth.real_digits import DigitHand
+
 INKS = [(22, 38, 130), (18, 30, 95), (25, 25, 30), (35, 35, 45), (30, 55, 150)]
 
 
@@ -41,8 +43,8 @@ def _font(path: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(path, size)
 
 
-def render_text(text: str, style: HandStyle, target_h: int, rng: random.Random) -> Image.Image:
-    """Renders text as an RGBA patch roughly target_h pixels tall."""
+def render_text(text: str, style: HandStyle, target_h: int, rng: random.Random, digits: DigitHand | None = None) -> Image.Image:
+    """Renders text as an RGBA patch roughly target_h pixels tall. With `digits`, digits are real handwritten samples."""
     size = max(10, int(target_h * 1.15 * style.size))
     scale = target_h / 40.0
     chars = list(text)
@@ -52,9 +54,15 @@ def render_text(text: str, style: HandStyle, target_h: int, rng: random.Random) 
     for ch in chars:
         fsize = max(8, int(size * rng.uniform(0.94, 1.06)))
         font = _font(style.font_path, fsize)
-        w = font.getlength(ch)
-        dy = rng.gauss(0, style.jitter * scale)
-        glyphs.append((ch, x, dy, font))
+        if digits is not None and ch.isdigit():
+            patch, top = digits.glyph(ch, font, style.ink, style.weight, rng)
+            w = patch.width + 0.04 * size
+            dy = rng.gauss(0, style.jitter * scale)
+            glyphs.append((patch, x, dy + top, None))
+        else:
+            w = font.getlength(ch)
+            dy = rng.gauss(0, style.jitter * scale)
+            glyphs.append((ch, x, dy, font))
         x += w + style.spacing * size + rng.gauss(0, 0.6 * scale)
     width = int(x + 2 * pad)
     height = int(size * 1.8 + 2 * pad)
@@ -63,6 +71,9 @@ def render_text(text: str, style: HandStyle, target_h: int, rng: random.Random) 
     alpha = rng.randint(205, 255)
     color = (*style.ink, alpha)
     for ch, gx, dy, font in glyphs:
+        if font is None:  # real digit patch
+            img.alpha_composite(ch, (int(pad + gx), max(0, int(pad + size * 0.25 + dy))))
+            continue
         draw.text((pad + gx, pad + size * 0.25 + dy), ch, font=font, fill=color, stroke_width=style.weight, stroke_fill=color)
     # slant (shear) and slight rotation
     shear = style.slant + rng.gauss(0, 0.03)

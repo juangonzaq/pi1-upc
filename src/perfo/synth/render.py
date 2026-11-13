@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from perfo.synth.content import FormContent
 from perfo.synth.handwriting import HandStyle, render_text, scribble
+from perfo.synth.real_digits import DigitHand
 
 PAPER = (251, 250, 246)
 LINE = (45, 45, 50)
@@ -137,16 +138,70 @@ def _paste_in_box(page: Image.Image, patch: Image.Image, box: tuple[int, int, in
     page.paste(patch, (px, py), patch)
 
 
-def fill_form(blank: Image.Image, template: dict[str, Any], content: FormContent, style: HandStyle, rng: random.Random) -> Image.Image:
+def _wrong_value(text: str, rng: random.Random) -> str:
+    """The value the operator wrote first and then crossed out: one digit changed."""
+    pos = [i for i, ch in enumerate(text) if ch.isdigit()]
+    i = rng.choice(pos)
+    return text[:i] + str((int(text[i]) + rng.randint(1, 9)) % 10) + text[i + 1 :]
+
+
+def _struck(patch: Image.Image, ink: tuple[int, int, int], rng: random.Random) -> Image.Image:
+    """Crosses out a written value: one or two strokes, or a zigzag."""
+    out = patch.copy()
+    d = ImageDraw.Draw(out)
+    w, h = out.size
+    width = max(2, h // 12)
+    kind = rng.choice(["line", "line", "double", "zigzag"])
+    if kind == "zigzag":
+        n = rng.randint(4, 7)
+        pts = [(w * i / n, h * (0.25 if i % 2 else 0.75) + rng.uniform(-2, 2)) for i in range(n + 1)]
+        d.line(pts, fill=(*ink, 235), width=width, joint="curve")
+    else:
+        for k in range(2 if kind == "double" else 1):
+            y = h * (0.5 + (k - 0.5) * 0.25 if kind == "double" else 0.5) + rng.uniform(-h * 0.1, h * 0.1)
+            d.line((-2, y + rng.uniform(-3, 3), w + 2, y + rng.uniform(-3, 3)), fill=(*ink, 235), width=width)
+    return out
+
+
+def _side_by_side(a: Image.Image, b: Image.Image, gap: int) -> Image.Image:
+    out = Image.new("RGBA", (a.width + gap + b.width, max(a.height, b.height)), (0, 0, 0, 0))
+    out.alpha_composite(a, (0, (out.height - a.height) // 2))
+    out.alpha_composite(b, (a.width + gap, (out.height - b.height) // 2))
+    return out
+
+
+def fill_form(blank: Image.Image, template: dict[str, Any], content: FormContent, style: HandStyle, rng: random.Random,
+              realism: dict[str, Any] | None = None, digits: DigitHand | None = None) -> Image.Image:
+    """Fills the blank form. `realism` (synth.realism) adds what real forms show and fonts alone do not: digits and
+    values that spill over the cell lines, and values crossed out and rewritten. Without it the output is unchanged."""
     page = blank.copy()
     boxes = _field_boxes(template)
     draw = ImageDraw.Draw(page)
+    rr = random.Random(rng.random()) if realism is not None else None  # realism decisions, separate from the base draws
+    p_over = float((realism or {}).get("overflow", 0.0))
+    p_strike = float((realism or {}).get("strikeout", 0.0))
 
     def write(fid: str, text: str) -> None:
         box = boxes[fid]
         bh = box[3] - box[1]
-        target = int(bh * rng.uniform(0.55, 0.72))
-        patch = render_text(text, style, target, rng)
+        if rr is None:
+            target = int(bh * rng.uniform(0.55, 0.72))
+            patch = render_text(text, style, target, rng)
+            _paste_in_box(page, patch, box, rng)
+            return
+        over = rr.random() < p_over
+        target = int(bh * (rr.uniform(0.68, 0.88) if over else rng.uniform(0.55, 0.72)))
+        patch = render_text(text, style, target, rng, digits)
+        if any(ch.isdigit() for ch in text) and rr.random() < p_strike:
+            wrong = _struck(render_text(_wrong_value(text, rr), style, target, rng, digits), style.ink, rr)
+            patch = _side_by_side(wrong, patch, max(4, target // 4))
+            content.flags.setdefault("strikeout", []).append(fid)
+        if over:
+            # spills past the cell: the stroke crosses the ruled lines above or below, as on paper filled in a hurry
+            x0, y0, x1, y1 = box
+            shift = int(bh * rr.uniform(0.2, 0.4)) * rr.choice([-1, 1])
+            box = (x0, y0 + shift, x1 + int((x1 - x0) * 0.08), y1 + shift)
+            content.flags.setdefault("overflow", []).append(fid)
         _paste_in_box(page, patch, box, rng)
 
     for fid, spec in content.fields.items():
@@ -165,7 +220,7 @@ def fill_form(blank: Image.Image, template: dict[str, Any], content: FormContent
         first = boxes[f"{dg['table']}.r{dg['row']:02d}.{dg['col']}"]
         last = boxes[f"{dg['table']}.r{dg['row'] + dg['span'] - 1:02d}.{dg['col']}"]
         x0, y0, x1, y1 = first[0], first[1], last[2], last[3]
-        patch = render_text(dg["text"], style, int((first[3] - first[1]) * 0.75), rng)
+        patch = render_text(dg["text"], style, int((first[3] - first[1]) * 0.75), rng, digits if realism is not None else None)
         angle = math.degrees(math.atan2((y1 - y0) * 0.55, (x1 - x0)))
         patch = patch.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True)
         _paste_in_box(page, patch, (x0, y0, x1, y1), rng, align_left=False)

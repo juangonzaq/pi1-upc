@@ -294,6 +294,36 @@ Ajustes del perfil `fisico` para fotos:
 - **Sin calibración.** No hay calibración para este formato, así que todos los campos van a revisión. Para aceptar automáticamente hay que calibrar con una partición de estas fotos (o de formatos reales).
 - **Datos generados.** En el 13 % de las filas (78 de 617), el % de desviación no cumple la fórmula impresa en el formato; las reglas lo marcan, como pide el TB1.
 
+## Corpus sintético realista
+
+El generador base escribe con 13 fuentes manuscritas y simula un escáner a 300 ppp. Eso enseña al modelo el formato de cada campo (fechas, horas, códigos, números), pero no la letra de una persona: en una fuente todos los «7» son iguales. Tampoco reproduce las fotos de campo, que llegan a unos 110 ppp. El bloque `synth.realism` (opcional) acerca el corpus a los formatos reales:
+
+| Clave | Qué agrega |
+|---|---|
+| `real_digits` | Proporción de operadores cuyos dígitos son muestras manuscritas reales (MNIST) y no glifos de una fuente. Cada operador recibe `samples_per_digit` muestras fijas por dígito: una mano consistente con variación natural. Los operadores históricos usan escritores del conjunto de entrenamiento de MNIST y los nuevos, del de prueba. Son personas distintas, así que un «operador no visto» también tiene una letra no vista. |
+| `overflow` | Proporción de campos escritos más grandes y desplazados, que cruzan las líneas de la celda. |
+| `strikeout` | Proporción de campos numéricos con un valor tachado (una o dos líneas, o un zigzag) y el valor correcto al lado. La etiqueta es el valor final. |
+| `phone_capture` | Proporción de formatos fotografiados con celular en vez de escaneados: luz desigual, sombra suave, tinte cálido, hoja levemente curvada, más perspectiva, resolución de `phone_ppp`, movimiento, el enfoque artificial del celular y un JPEG más comprimido. |
+
+```bash
+perfo synth -p realista -w data/realista_demo      # solo el corpus
+make e2e-realista                                  # flujo completo, mismo tamaño y semilla que smoke
+```
+
+El perfil `realista` usa el mismo corpus que `smoke` (tamaño y semilla) con `realism` activado. Así, «sintético simple» y «sintético realista» se comparan con todo lo demás igual. Ese perfil acepta la escala de una foto (`preprocessing.max_scale_det: 14`), igual que `fisico`. Sin `realism`, el generador produce exactamente las mismas imágenes y la misma verdad que antes, lo que se comprobó al regenerar el corpus smoke del 16/10.
+
+MNIST (Y. LeCun, C. Cortes, C. Burges; CC BY-SA 3.0) se descarga una vez (11 MB) a `data/handwriting/`, fuera de git. Sin red, los dígitos vuelven a las fuentes y el manifiesto lo registra en `realism.digits_source`. La verdad de cada formato indica la captura (`capture`) y el origen de los dígitos (`style.digits`). Las banderas `overflow` y `strikeout` dicen qué campos se alteraron.
+
+**Lo que se midió con 40 formatos** (alineación y segmentación, sin reconocimiento):
+
+- En los formatos escaneados, todos alinean y el 100 % de los campos escritos dan un recorte con tinta.
+- En las fotos con celular, sin la regla de anclas confiables (abajo), alinean 11 de 21. En las 8 que fallan por desfase, las marcas confiables de la plantilla (puntaje > 0,5) quedan a 10 px o menos, dentro de la tolerancia de 12 px. Lo que hace fallar el formato es una sola marca de baja confianza, casi siempre bajo la sombra o en una esquina oscura, porque `check_alignment` cuenta también las marcas de baja confianza. Una foto real con sombra en una esquina fallaría igual. Con sombras más fuertes (hasta 0,42) solo alineaban 9 de 21, así que la sombra quedó limitada a 0,08–0,26.
+- Con la regla activada, alinean 20 de 21 fotos y todos los campos escritos dan recorte. La que falta no se reconoce como el formato (27 correspondencias). Se revisaron a ojo los recortes de una página que antes fallaba (`H0030`, con 4 de 14 anclas ignoradas): cada recorte contiene su campo.
+
+**Regla de anclas confiables** (`segmentation.alignment_min_score`, desactivada por defecto y activada en `realista`). Solo actúa sobre una página que falló el control de alineación. Si al menos `alignment_min_reliable` (70 %) de las anclas tienen un puntaje mayor que `alignment_min_score` (0,5), y todas ellas están dentro de la tolerancia, la página se acepta. Las anclas ignoradas quedan en `alignment.ignored_anchors`, junto al desfase con todas las anclas (`max_offset_all_px`). Las páginas que ya pasaban no cambian, así que activarla en otro perfil no altera ningún documento ya segmentado; solo puede rescatar los que fallaban.
+
+**Límites.** Las letras siguen saliendo de fuentes; solo los dígitos son reales. Los dígitos de MNIST son de escritores estadounidenses: el «7» casi nunca lleva barra y el «1» rara vez lleva gancho, a diferencia de lo habitual en Perú. La foto simulada no incluye la mesa alrededor de la hoja. Nada de esto reemplaza un conjunto de prueba con formatos reales transcritos, que es la única forma de saber si el modelo mejora con la letra de los operadores.
+
 ## Control de resolución
 
 La resolución se mide en ppp equivalentes: el lado mayor de la imagen frente al de la página de referencia, a la resolución de la plantilla. Hay dos niveles:

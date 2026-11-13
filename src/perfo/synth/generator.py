@@ -1,4 +1,8 @@
-"""Synthetic corpus generator: images at 300 dpi, per-field ground truth, transcribed history CSV and masters."""
+"""Synthetic corpus generator: images at 300 dpi, per-field ground truth, transcribed history CSV and masters.
+
+`synth.realism` (opt-in) brings the corpus closer to the real field forms: real handwritten digits, values over the
+cell lines, crossed-out values and phone photos instead of scans. Without it the corpus is byte-identical to before.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ import csv
 import hashlib
 import json
 import random
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict
 from datetime import date, timedelta
@@ -42,8 +47,22 @@ def _render_worker(job: dict[str, Any]) -> dict[str, Any]:
     content = FormContent(**job["content"])
     style = HandStyle(**job["style"])
     rng = random.Random(job["seed"])
-    page = fill_form(_BLANK[key], job["template"], content, style, rng)
-    data, params = scan(page, random.Random(job["noise_seed"]), bad=job.get("bad"))
+    realism = job.get("realism")
+    if realism is None:
+        page = fill_form(_BLANK[key], job["template"], content, style, rng)
+    else:
+        from perfo.synth.real_digits import DigitHand  # noqa: PLC0415
+
+        digits = DigitHand(**job["digits"]) if job.get("digits") else None
+        page = fill_form(_BLANK[key], job["template"], content, style, rng, realism, digits)
+    if job.get("capture") == "phone" and not job.get("bad"):
+        from perfo.synth.noise import phone  # noqa: PLC0415
+
+        r = realism or {}
+        data, params = phone(page, random.Random(job["noise_seed"]), tuple(r.get("phone_ppp", (105.0, 220.0))),
+                             float(job["template"]["reference"].get("dpi", 300)))
+    else:
+        data, params = scan(page, random.Random(job["noise_seed"]), bad=job.get("bad"))
     Path(job["image_path"]).write_bytes(data)
     return {"form_id": content.form_id, "noise": params, "flags": content.flags, "sha256": hashlib.sha256(data).hexdigest()}
 
@@ -89,6 +108,38 @@ def _operator_profiles(
     return profiles, styles
 
 
+def _realism_setup(sc: dict[str, Any], seed: int, operators: list[dict[str, Any]], new_ops: list[dict[str, Any]],
+                   fonts_dir: Path) -> tuple[dict[str, Any] | None, dict[str, dict[str, Any]], dict[str, Any] | None]:
+    """synth.realism -> (config for the render workers, real-digit hand per operator, summary for the manifest)."""
+    r = sc.get("realism") or {}
+    if not r.get("enabled", False):
+        return None, {}, None
+    from perfo.synth.real_digits import SOURCE, ensure_digit_bank, operator_pools  # noqa: PLC0415
+
+    hands: dict[str, dict[str, Any]] = {}
+    share = float(r.get("real_digits", 0.0))
+    bank = ensure_digit_bank(Path(fonts_dir).parent / "handwriting") if share > 0 else None
+    if bank is not None:
+        for op in operators:
+            orng = random.Random(_seed(seed, "digits", op["codigo"]))
+            if orng.random() < share:
+                split = "test" if op in new_ops else "train"  # MNIST train and test writers are different people
+                hands[op["codigo"]] = {"bank": str(bank), "split": split,
+                                       "pools": operator_pools(bank, split, orng, int(r.get("samples_per_digit", 6)))}
+    summary = {
+        "config": r,
+        "digits_source": SOURCE if bank is not None else ("fuentes (MNIST no disponible: sin red)" if share > 0 else "fuentes"),
+        "operators_real_digits": sorted(hands),
+    }
+    return {k: v for k, v in r.items() if k != "enabled"}, hands, summary
+
+
+def _capture(r: dict[str, Any] | None, seed: int, form_id: str) -> str:
+    if r is None:
+        return "scanner"
+    return "phone" if random.Random(_seed(seed, form_id, "capture")).random() < float(r.get("phone_capture", 0.0)) else "scanner"
+
+
 def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: Path, fonts_dir: Path, seed: int) -> dict[str, Any]:
     """Generates the full synthetic corpus and returns its manifest."""
     sc = cfg
@@ -109,6 +160,7 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
     operators = [p for p in masters["personal"] if p["rol"] == "OPERADOR"]
     hist_ops, new_ops = operators[:n_ops], operators[n_ops:]
     profiles, styles = _operator_profiles(seed, operators, new_ops, reserved, regular)
+    realism, hands, realism_summary = _realism_setup(sc, seed, operators, new_ops, fonts_dir)
 
     equipment = masters["equipos"]
     template = parse_template(template_def)
@@ -153,11 +205,14 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
                 bad = "low_res" if (i % 2 == 0) else "cut"
             image_path = out_dir / "images" / batch / f"{form_id}.jpg"
             content_dict = asdict(content)
-            jobs.append({
+            job = {
                 "template": template_def, "printed_font": printed, "content": content_dict,
                 "style": asdict(styles[p["operator"]["codigo"]]), "seed": _seed(seed, form_id, "render"),
                 "noise_seed": _seed(seed, form_id, "noise"), "image_path": str(image_path), "bad": bad,
-            })
+            }
+            if realism is not None:
+                job.update(realism=realism, digits=hands.get(p["operator"]["codigo"]), capture=_capture(realism, seed, form_id))
+            jobs.append(job)
             forms_meta.append({"form_id": form_id, "batch": batch, "image": str(image_path.relative_to(out_dir)), "bad_scan": bad,
                                "true_key": f"{content.date}|{content.crew}|{content.equipment}", "operator": content.operator,
                                "new_operator": p["operator"] in new_ops, "content": content})
@@ -183,7 +238,7 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
     for m in forms_meta:
         c: FormContent = m.pop("content")
         res = by_id[c.form_id]
-        gt = _gt_payload(c, res, styles[c.operator], m["bad_scan"])
+        gt = _gt_payload(c, res, styles[c.operator], m["bad_scan"], hands.get(c.operator) if realism is not None else False)
         (out_dir / "gt" / f"{c.form_id}.json").write_text(json.dumps(gt, ensure_ascii=False, indent=1))
         m["gt"] = f"gt/{c.form_id}.json"
         m["image_sha256"] = res["sha256"]
@@ -249,17 +304,27 @@ def generate_corpus(cfg: dict[str, Any], template_def: dict[str, Any], out_dir: 
         "rescan": rescan,
         "config": {k: v for k, v in sc.items()},
     }
+    if realism_summary is not None:
+        manifest["realism"] = realism_summary | {
+            "capture": dict(Counter(by_id[m["form_id"]]["noise"].get("capture", "scanner") for m in manifest_forms)),
+        }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
     return manifest
 
 
-def _gt_payload(c: FormContent, render: dict[str, Any], style: HandStyle, bad: str | None) -> dict[str, Any]:
-    return {
+def _gt_payload(c: FormContent, render: dict[str, Any], style: HandStyle, bad: str | None,
+                hand: dict[str, Any] | None | bool = False) -> dict[str, Any]:
+    """`hand` is False without realism (payload unchanged), else the operator's real-digit hand or None (font digits)."""
+    out = {
         "form_id": c.form_id, "batch": c.batch, "date": c.date, "shift": c.shift, "crew": c.crew, "equipment": c.equipment,
         "operator": c.operator, "fields": c.fields, "extra_text": c.extra_text, "diagonal": c.diagonal,
         "signatures": c.signatures, "flags": render["flags"], "noise": render["noise"], "bad_scan": bad,
         "style": asdict(style) | {"font": Path(style.font_path).stem},
     }
+    if hand is not False:
+        out["style"]["digits"] = f"mnist-{hand['split']}" if hand else "fuente"
+        out["capture"] = render["noise"].get("capture", "scanner")
+    return out
 
 
 def generate_extra_forms(out_dir: Path, template_def: dict[str, Any], fonts_dir: Path, n: int, batch: str = "demo") -> list[dict[str, Any]]:
@@ -286,6 +351,7 @@ def generate_extra_forms(out_dir: Path, template_def: dict[str, Any], fonts_dir:
     n_ops = int(sc["operators"])
     hist_ops, new_ops = operators[:n_ops], operators[n_ops:]
     profiles, styles = _operator_profiles(seed, operators, new_ops, reserved, regular)
+    realism, hands, _ = _realism_setup(sc, seed, operators, new_ops, fonts_dir)
 
     start = sum(1 for f in man["forms"] if f["batch"] == batch)
     rng = random.Random(_seed(seed, "extra", batch, start))
@@ -305,11 +371,15 @@ def generate_extra_forms(out_dir: Path, template_def: dict[str, Any], fonts_dir:
         content = generate_content(form_id, batch, random.Random(_seed(seed, form_id)), d, (d - HIST_START).days, shift, eq, op,
                                    profiles[op["codigo"]], masters, sc)
         image_path = out_dir / "images" / batch / f"{form_id}.jpg"
-        res = _render_worker({
+        job = {
             "template": template_def, "printed_font": fonts["printed"][0], "content": asdict(content), "style": asdict(styles[op["codigo"]]),
             "seed": _seed(seed, form_id, "render"), "noise_seed": _seed(seed, form_id, "noise"), "image_path": str(image_path), "bad": None,
-        })
-        (out_dir / "gt" / f"{form_id}.json").write_text(json.dumps(_gt_payload(content, res, styles[op["codigo"]], None), ensure_ascii=False, indent=1))
+        }
+        if realism is not None:
+            job.update(realism=realism, digits=hands.get(op["codigo"]), capture=_capture(realism, seed, form_id))
+        res = _render_worker(job)
+        gt_payload = _gt_payload(content, res, styles[op["codigo"]], None, hands.get(op["codigo"]) if realism is not None else False)
+        (out_dir / "gt" / f"{form_id}.json").write_text(json.dumps(gt_payload, ensure_ascii=False, indent=1))
         key = f"{content.date}|{content.crew}|{content.equipment}"
         used.add(key)
         entries.append({"form_id": form_id, "batch": batch, "image": str(image_path.relative_to(out_dir)), "bad_scan": None, "true_key": key,

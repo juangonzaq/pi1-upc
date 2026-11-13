@@ -1,0 +1,53 @@
+# Perfil realista: el corpus del perfil smoke (mismo tamaño y semilla) con el generador acercado a los formatos reales,
+# para comparar «sintético simple» contra «sintético realista» con todo lo demás igual.
+workspace: data/e2e/realista
+model:
+  base_checkpoint: microsoft/trocr-small-handwritten
+  batch_size: 32
+preprocessing:
+  max_scale_det: 14.0      # las fotos de celular llegan a menor resolución que la página plana (igual que el perfil fisico)
+segmentation:
+  # una sombra o una esquina oscura puede hacer que una sola ancla calce mal con puntaje bajo y tumbe una hoja bien
+  # alineada: si al menos el 70 % de las anclas son confiables y están dentro de la tolerancia, se ignoran las demás
+  alignment_min_score: 0.5
+  alignment_min_reliable: 0.7
+synth:
+  historical_forms: 80
+  operational_forms: 16
+  operators: 12
+  new_operators: 2
+  labores: 36
+  equipment: 8
+  max_activity_rows: 5
+  max_delay_rows: 2
+  max_failure_rows: 1
+  history_error_rate: 0.03
+  history_duplicate_rate: 0.03
+  history_missing_rate: 0.03
+  metadata_error_rate: 0.02
+  bad_scans_historical: 1
+  bad_scans_operational: 1
+  workers: 6
+  realism:
+    enabled: true
+    real_digits: 0.8         # operadores cuyos dígitos son muestras manuscritas reales (MNIST); el resto, fuentes
+    samples_per_digit: 6     # muestras por dígito y operador: mano consistente con variación natural
+    overflow: 0.12           # campos que se salen de la celda y cruzan las líneas
+    strikeout: 0.03          # valores tachados y reescritos al lado (la etiqueta es el valor final)
+    phone_capture: 0.5       # formatos fotografiados con celular en vez de escaneados
+    phone_ppp: [105, 220]    # resolución de la foto (las fotos reales de campo rondan 110 ppp)
+dataset:
+  unseen_operators: 1
+  sprint1_sample: 3
+  reference_subset: 6
+  required_formats: 70
+training:
+  max_steps: 160
+  eval_every: 40
+  patience: 2
+  batch_size: 16
+  lr: 1.0e-4
+cycle:
+  max_steps: 120
+  eval_every: 30
+  patience: 2

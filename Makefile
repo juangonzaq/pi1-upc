@@ -6,7 +6,7 @@ PROFILE ?= smoke
 WS      ?=
 PORT    ?= 8000
 
-.PHONY: install install-web template fisico-data fisico-template fisico-templates fisico api-fisico dev-fisico test test-slow e2e-smoke e2e-smoke-cpu e2e-full status api web-install web web-build dev
+.PHONY: install install-web template fisico-data fisico-template fisico-templates fisico api-fisico dev-fisico test test-slow e2e-smoke e2e-smoke-cpu e2e-full e2e-realista status api web-install web web-build dev
 
 install:  ## Crea el entorno (Python 3.12) e instala dependencias
 	@command -v uv >/dev/null 2>&1 && { uv venv --python 3.12 .venv && uv pip install --python $(PY) -e '.[dev,lora,web]'; } \
@@ -32,6 +32,9 @@ e2e-smoke-cpu:  ## Flujo smoke forzando CPU (verifica el presupuesto de 15 minut
 
 e2e-full:  ## Flujo de extremo a extremo, perfil full
 	$(PERFO) e2e --profile full
+
+e2e-realista:  ## Flujo smoke con el corpus realista (dígitos reales, tachones, fotos con celular)
+	$(PERFO) e2e --profile realista
 
 status:
 	$(PERFO) status

@@ -75,6 +75,27 @@ def check_alignment(aligned_gray: np.ndarray, template: Template, reference_path
     return {"anchors": offsets, "max_offset_px": worst, "tolerance_px": tol, "ok": worst <= tol, "outliers": outliers}
 
 
+def _accept_reliable_anchors(align: dict[str, Any], cfg: dict[str, Any]) -> dict[str, Any]:
+    """Second look at a page that failed the alignment check (opt-in: segmentation.alignment_min_score).
+
+    In phone photos a shadow or a dark corner can make one anchor match the wrong place with a low score, and that
+    single anchor fails a page whose other anchors agree within a pixel or two. If enough anchors are reliable
+    (score above alignment_min_score, at least alignment_min_reliable of them) and all of those are within tolerance,
+    the page is accepted and the ignored anchors are recorded. Pages that pass the check are never touched.
+    """
+    min_score = cfg.get("alignment_min_score")
+    if min_score is None or not align["anchors"]:
+        return align
+    reliable = [o for o in align["anchors"] if o["score"] > float(min_score)]
+    if len(reliable) < float(cfg.get("alignment_min_reliable", 0.7)) * len(align["anchors"]):
+        return align
+    worst = max(max(abs(o["dx"]), abs(o["dy"])) for o in reliable)
+    if worst > align["tolerance_px"]:
+        return align
+    ignored = [o["anchor"] for o in align["anchors"] if o["score"] <= float(min_score)]
+    return align | {"ok": True, "max_offset_px": worst, "ignored_anchors": ignored, "max_offset_all_px": align["max_offset_px"]}
+
+
 def _drop_red(bgr: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
@@ -130,6 +151,8 @@ def _ink_mask(gray: np.ndarray, threshold: int, min_px: int) -> np.ndarray:
 def segment(aligned_bgr: np.ndarray, template: Template, reference_path: str, cfg: dict[str, Any], fields: list[FieldSpec] | None = None) -> SegmentationResult:
     gray_full = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2GRAY)
     align = check_alignment(gray_full, template, reference_path)
+    if not align["ok"]:
+        align = _accept_reliable_anchors(align, cfg)
     if not align["ok"]:
         missing = sum(1 for o in align["anchors"] if o["score"] <= 0.3)
         detail = f"{missing} anclas de la plantilla no encontradas" if missing else f"desfase {align['max_offset_px']} px > {align['tolerance_px']} px"
